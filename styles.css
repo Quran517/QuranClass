@@ -221,3 +221,5 @@ h3 { font-size: 1rem; margin: 18px 0 8px; }
 .steps li { margin-bottom: 4px; }
 .preview { max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 10px; }
 tr.warn td { background: var(--amber-bg); }
+.input-row { display: flex; gap: 6px; align-items: center; }
+.input-row input { flex: 1; }

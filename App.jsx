@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react';
 import { supabase, configured } from './supabase.js';
-import Auth, { NewPassword } from './components/Auth.jsx';
-import Layout from './components/Layout.jsx';
-import StudentHome from './components/StudentHome.jsx';
-import Dashboard from './components/Dashboard.jsx';
-import Admissions from './components/Admissions.jsx';
-import Students from './components/Students.jsx';
-import Classes from './components/Classes.jsx';
-import Users from './components/Users.jsx';
-import Attendance from './components/Attendance.jsx';
-import Reports from './components/Reports.jsx';
-import MyClasses from './components/MyClasses.jsx';
-import Account from './components/Account.jsx';
+import Auth, { NewPassword } from './Auth.jsx';
+import Layout from './Layout.jsx';
+import StudentHome from './StudentHome.jsx';
+import Dashboard from './Dashboard.jsx';
+import Admissions from './Admissions.jsx';
+import Students from './Students.jsx';
+import Classes from './Classes.jsx';
+import Users from './Users.jsx';
+import Attendance from './Attendance.jsx';
+import Reports from './Reports.jsx';
+import MyClasses from './MyClasses.jsx';
+import Account from './Account.jsx';
 
 const TABS = {
   student: [

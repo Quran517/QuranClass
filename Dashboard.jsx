@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../supabase.js';
-import { today } from '../lib/util.js';
+import { supabase } from './supabase.js';
+import { today } from './util.js';
 
 export default function Dashboard({ go }) {
   const [s, setS] = useState(null);
@@ -44,7 +44,7 @@ export default function Dashboard({ go }) {
       </section>
       {s.classes === 0 && (
         <section className="card notice">
-          <b>Getting started:</b> 1) Create classes under <i>Classes</i>. 2) Give teachers access under <i>Users</i>.
+          <b>Getting started:</b> 1) Create classes under <i>Classes</i>. 2) Create teacher logins under <i>Users</i>.
           3) Approve applications under <i>Admissions</i> and assign each student a class.
         </section>
       )}

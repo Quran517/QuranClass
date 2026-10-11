@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../supabase.js';
+import { supabase } from './supabase.js';
 import StudentForm from './StudentForm.jsx';
 import StudentQR from './StudentQR.jsx';
-import { formatDate, STATUS_LABELS } from '../lib/util.js';
+import { formatDate, STATUS_LABELS } from './util.js';
 
 const STATUS_TEXT = {
   pending: 'Your application has been received and is waiting for review. You will be contacted on WhatsApp once it is approved.',

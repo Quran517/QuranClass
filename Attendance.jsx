@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { supabase } from '../supabase.js';
-import { useQuery, fetchMyClasses } from '../lib/data.js';
-import { today, formatDate, whatsappLink, STATUS_LABELS } from '../lib/util.js';
+import { supabase } from './supabase.js';
+import { useQuery, fetchMyClasses } from './data.js';
+import { today, formatDate, whatsappLink, STATUS_LABELS } from './util.js';
 import QrScanner from './QrScanner.jsx';
 import { QR_PREFIX } from './StudentQR.jsx';
 

@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { supabase } from '../supabase.js';
-import { useQuery, fetchClasses } from '../lib/data.js';
-import { formatDate, whatsappLink } from '../lib/util.js';
+import { supabase } from './supabase.js';
+import { useQuery, fetchClasses } from './data.js';
+import { formatDate, whatsappLink } from './util.js';
 
 function approvalMessage(s, klass) {
   return (

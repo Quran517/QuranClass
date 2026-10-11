@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '../supabase.js';
+import { supabase } from './supabase.js';
 
 export default function Account({ profile, onSaved }) {
   const [name, setName] = useState(profile.full_name || '');

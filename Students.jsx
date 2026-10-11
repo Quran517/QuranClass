@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react';
-import { supabase } from '../supabase.js';
-import { useQuery, fetchClasses } from '../lib/data.js';
-import { formatDate, whatsappLink } from '../lib/util.js';
-import { downloadExcel } from '../lib/exports.js';
+import { supabase } from './supabase.js';
+import { useQuery, fetchClasses } from './data.js';
+import { formatDate, whatsappLink } from './util.js';
+import { downloadExcel } from './exports.js';
 import StudentForm from './StudentForm.jsx';
 import StudentQR from './StudentQR.jsx';
 import Modal from './Modal.jsx';

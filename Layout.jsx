@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { supabase } from '../supabase.js';
+import { supabase } from './supabase.js';
 
 const ROLE_LABEL = { student: 'Student', teacher: 'Teacher', admin: 'Admin' };
 
@@ -14,7 +14,7 @@ export default function Layout({ profile, tabs, current, onTab, children }) {
             <span className="logo small" aria-hidden="true">۞</span>
             <div>
               <div className="brand-name">SLIS-Jeddah Quran Class</div>
-              <div className="brand-sub">{profile.full_name || profile.email} · {ROLE_LABEL[profile.role]}</div>
+              <div className="brand-sub">{profile.full_name || profile.email} · {ROLE_LABEL[profile.role]}{profile.staff_code ? ` · ${profile.staff_code}` : ''}</div>
             </div>
           </div>
           <button className="menu-btn" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)}>☰</button>

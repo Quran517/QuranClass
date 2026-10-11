@@ -1,6 +1,6 @@
-import { supabase } from '../supabase.js';
-import { useQuery, fetchMyClasses } from '../lib/data.js';
-import { whatsappLink } from '../lib/util.js';
+import { supabase } from './supabase.js';
+import { useQuery, fetchMyClasses } from './data.js';
+import { whatsappLink } from './util.js';
 
 export default function MyClasses({ profile, go }) {
   const classes = useQuery(() => fetchMyClasses(profile), [profile.id]);

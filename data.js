@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { supabase } from '../supabase.js';
+import { supabase } from './supabase.js';
 
 // Small helper: run a query, keep data / error / loading, allow reload.
 export function useQuery(fn, deps = []) {
@@ -24,7 +24,7 @@ export const fetchClasses = () =>
   supabase.from('classes').select('*').order('name');
 
 export const fetchTeachers = () =>
-  supabase.from('profiles').select('id, full_name, email, phone, role').in('role', ['teacher', 'admin']).order('full_name');
+  supabase.from('profiles').select('id, full_name, email, phone, role, staff_code').in('role', ['teacher', 'admin']).order('full_name');
 
 // Classes this person can take attendance / reports for.
 export function fetchMyClasses(profile) {

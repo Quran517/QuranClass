@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from '../supabase.js';
-import { useQuery, fetchMyClasses } from '../lib/data.js';
-import { today, daysAgo, formatDate, STATUS_LABELS } from '../lib/util.js';
-import { downloadExcel, downloadPdf } from '../lib/exports.js';
+import { supabase } from './supabase.js';
+import { useQuery, fetchMyClasses } from './data.js';
+import { today, daysAgo, formatDate, STATUS_LABELS } from './util.js';
+import { downloadExcel, downloadPdf } from './exports.js';
 
 // Supabase returns at most 1000 rows per request, so page through.
 async function fetchAll(build) {

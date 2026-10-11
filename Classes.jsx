@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { supabase } from '../supabase.js';
-import { useQuery, fetchClasses, fetchTeachers } from '../lib/data.js';
+import { supabase } from './supabase.js';
+import { useQuery, fetchClasses, fetchTeachers } from './data.js';
 import Modal from './Modal.jsx';
 import ImportStudents from './ImportStudents.jsx';
 
@@ -15,7 +15,7 @@ export default function Classes() {
 
   const teacherName = (id) => {
     const t = (teachers.data || []).find((x) => x.id === id);
-    return t ? t.full_name || t.email : null;
+    return t ? `${t.full_name || t.email}${t.staff_code ? ' (' + t.staff_code + ')' : ''}` : null;
   };
   const countFor = (id) => (students.data || []).filter((s) => s.class_id === id).length;
 
@@ -86,10 +86,10 @@ export default function Classes() {
             <label className="span2">Teacher
               <select name="teacher_id" defaultValue={editing.teacher_id || ''}>
                 <option value="">Not assigned</option>
-                {(teachers.data || []).map((t) => <option key={t.id} value={t.id}>{t.full_name || t.email}{t.role === 'admin' ? ' (admin)' : ''}</option>)}
+                {(teachers.data || []).map((t) => <option key={t.id} value={t.id}>{t.full_name || t.email}{t.staff_code ? ` · ${t.staff_code}` : ''}{t.role === 'admin' ? ' (admin)' : ''}</option>)}
               </select>
             </label>
-            {(teachers.data || []).length === 0 && <p className="span2 small muted">No teachers yet. Teachers create an account, then you give them the Teacher role under Users.</p>}
+            {(teachers.data || []).length === 0 && <p className="span2 small muted">No teachers yet. Create teacher logins under Users → Create teacher login.</p>}
             {err && <p className="error span2">{err}</p>}
             {notice && <p className="success span2">{notice}</p>}
             <div className="span2 actions">
