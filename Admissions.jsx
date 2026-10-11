@@ -2,11 +2,14 @@ import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchClasses } from './data.js';
 import { formatDate, whatsappLink } from './util.js';
+import { getSettings } from './settings.js';
+import StudentForm from './StudentForm.jsx';
+import Modal from './Modal.jsx';
 
 function approvalMessage(s, klass) {
   return (
     `Assalamu Alaikum ${s.guardian_name || ''},\n\n` +
-    `We are pleased to confirm that ${s.full_name} has been admitted to the SLIS-Jeddah Quran Class.\n` +
+    `We are pleased to confirm that ${s.full_name} has been admitted to the ${getSettings().school_name}.\n` +
     `Student ID: ${s.student_code}\n` +
     (klass ? `Class: ${klass.name}${klass.schedule ? ' (' + klass.schedule + ')' : ''}\n` : '') +
     `\nPlease sign in to the Quran class portal to view the attendance QR code.\n\nJazakAllahu khairan.`
@@ -16,7 +19,7 @@ function approvalMessage(s, klass) {
 function rejectionMessage(s) {
   return (
     `Assalamu Alaikum ${s.guardian_name || ''},\n\n` +
-    `Thank you for applying for ${s.full_name} to the SLIS-Jeddah Quran Class. ` +
+    `Thank you for applying for ${s.full_name} to the ${getSettings().school_name}. ` +
     `Unfortunately we are unable to offer a place at this time. Please contact us for more details.\n\nJazakAllahu khairan.`
   );
 }
@@ -31,6 +34,8 @@ export default function Admissions() {
   const [choice, setChoice] = useState({});
   const [done, setDone] = useState({});
   const [err, setErr] = useState('');
+  const [editing, setEditing] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   async function decide(s, status) {
     setErr('');
@@ -40,6 +45,19 @@ export default function Admissions() {
     if (error) { setErr(error.message); return; }
     const klass = (classes.data || []).find((c) => c.id === class_id);
     setDone({ ...done, [s.id]: { status, link: whatsappLink(s.whatsapp || s.guardian_phone, status === 'approved' ? approvalMessage({ ...s }, klass) : rejectionMessage(s)) } });
+  }
+
+  async function saveEdit(values) {
+    setBusy(true); setErr('');
+    const { error } = await supabase.from('students').update(values).eq('id', editing.id);
+    setBusy(false);
+    if (error) setErr(error.message); else { setEditing(null); list.reload(); }
+  }
+
+  async function remove(s) {
+    if (!window.confirm(`Delete the application for ${s.full_name}? This cannot be undone (but it is kept in the Activity log and your backups).`)) return;
+    const { error } = await supabase.from('students').delete().eq('id', s.id);
+    if (error) setErr(error.message); else list.reload();
   }
 
   const rows = list.data || [];
@@ -94,10 +112,12 @@ export default function Admissions() {
                     </select>
                     <button className="btn" onClick={() => decide(s, 'approved')}>Approve</button>
                     <button className="btn danger ghost" onClick={() => decide(s, 'rejected')}>Reject</button>
+                    <button className="btn ghost small" onClick={() => setEditing(s)}>Edit</button>
                   </div>
                 ) : filter === 'rejected' ? (
                   <div className="decision">
                     <button className="btn ghost" onClick={() => decide(s, 'pending')}>Move back to pending</button>
+                    <button className="btn danger ghost small" onClick={() => remove(s)}>Delete</button>
                   </div>
                 ) : (
                   <div className="decision">
@@ -111,6 +131,13 @@ export default function Admissions() {
             );
           })}
         </div>
+      )}
+      {editing && (
+        <Modal title={`Edit application: ${editing.full_name}`} onClose={() => setEditing(null)}>
+          <StudentForm initial={editing} onSubmit={saveEdit} busy={busy} requireConsent={false} submitLabel="Save changes" />
+          {err && <p className="error">{err}</p>}
+          <p><button className="btn danger ghost small" onClick={() => { const s = editing; setEditing(null); remove(s); }}>Delete application</button></p>
+        </Modal>
       )}
     </section>
   );

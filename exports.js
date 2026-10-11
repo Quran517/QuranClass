@@ -1,3 +1,5 @@
+import { getSettings } from './settings.js';
+
 // Excel and PDF downloads. Libraries are loaded only when needed,
 // so the app stays fast on phones.
 
@@ -28,7 +30,7 @@ export async function downloadPdf(filename, { title, subtitle, tables }) {
   doc.rect(0, 64, doc.internal.pageSize.getWidth(), 4, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
-  doc.text('SLIS-Jeddah Quran Class', 40, 30);
+  doc.text(`${getSettings().school_name}${getSettings().academic_year ? ' · ' + getSettings().academic_year : ''}`, 40, 30);
   doc.setFontSize(11);
   doc.text(title, 40, 50);
 

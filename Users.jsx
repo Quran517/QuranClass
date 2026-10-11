@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 import { useQuery } from './data.js';
 import { formatDate, whatsappLink } from './util.js';
 import Modal from './Modal.jsx';
+import { getSettings } from './settings.js';
 
 function makePassword() {
   const words = ['Noor', 'Huda', 'Iqra', 'Sabr', 'Ilm', 'Amal', 'Rahma', 'Taqwa'];
@@ -12,7 +13,7 @@ function makePassword() {
 function loginMessage({ full_name, email, password, role, staff_code }) {
   return (
     `Assalamu Alaikum ${full_name || ''},\n\n` +
-    `Your SLIS-Jeddah Quran Class ${role} login is ready.\n` +
+    `Your ${getSettings().school_name} ${role} login is ready.\n` +
     (staff_code ? `Teacher ID: ${staff_code}\n` : '') +
     `Website: ${window.location.origin}\n` +
     `Email: ${email}\n` +

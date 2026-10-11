@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import StudentForm from './StudentForm.jsx';
 import StudentQR from './StudentQR.jsx';
+import { PrintCards, studentToCard, printCards } from './IdCards.jsx';
 import { formatDate, STATUS_LABELS } from './util.js';
 
 const STATUS_TEXT = {
@@ -93,6 +94,9 @@ export default function StudentHome({ profile }) {
           <h2>My attendance QR code</h2>
           <p className="muted small">Save this to your phone or print it. Keep it private: it marks you present.</p>
           <StudentQR student={student} />
+          <h3>My ID card</h3>
+          <div className="card-preview"><PrintCards people={[studentToCard(student, klass?.name)]} withBack /></div>
+          <p><button className="btn ghost" onClick={printCards}>Print my ID card</button></p>
         </section>
       )}
 

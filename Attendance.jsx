@@ -59,6 +59,17 @@ export default function Attendance({ profile }) {
     else { setSaved({ ...saved, ...Object.fromEntries(dirty.map((s) => [s.id, marks[s.id]])) }); setMsg(`Saved ${rows.length} record${rows.length > 1 ? 's' : ''}.`); }
   }
 
+  async function clearMark(s) {
+    setErr(''); setMsg('');
+    if (saved[s.id]) {
+      const { error } = await supabase.from('attendance').delete()
+        .eq('student_id', s.id).eq('class_id', classId).eq('att_date', date);
+      if (error) { setErr(error.message); return; }
+    }
+    const m = { ...marks }; delete m[s.id]; setMarks(m);
+    const sv = { ...saved }; delete sv[s.id]; setSaved(sv);
+  }
+
   function markRest(status) {
     const next = { ...marks };
     for (const s of students) if (!next[s.id]) next[s.id] = status;
@@ -161,6 +172,7 @@ export default function Attendance({ profile }) {
                         {STATUS_LABELS[k]}
                       </button>
                     ))}
+                    {st && <button className="pill clear" title="Clear this mark" aria-label={`Clear mark for ${s.full_name}`} onClick={() => clearMark(s)}>✕</button>}
                     {wa && <a className="pill whatsapp" href={wa} target="_blank" rel="noreferrer" title="Notify guardian on WhatsApp">WhatsApp</a>}
                   </div>
                 </div>

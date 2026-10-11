@@ -32,3 +32,15 @@ export function fetchMyClasses(profile) {
   if (profile.role !== 'admin') q = q.eq('teacher_id', profile.id);
   return q;
 }
+
+// Supabase returns at most 1000 rows per request, so page through.
+export async function fetchAllRows(build) {
+  const size = 1000;
+  const all = [];
+  for (let from = 0; ; from += size) {
+    const { data, error } = await build().range(from, from + size - 1);
+    if (error) throw error;
+    all.push(...data);
+    if (data.length < size) return all;
+  }
+}

@@ -1,12 +1,15 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
+import { useSettings } from './settings.js';
 
 export function Brand() {
+  const s = useSettings();
   return (
     <div className="brand-block">
       <div className="logo" aria-hidden="true">۞</div>
-      <h1>SLIS-Jeddah Quran Class</h1>
-      <p>Quran Learning • Character • Knowledge</p>
+      <h1>{s.school_name}</h1>
+      <p>{s.tagline}</p>
+      {s.academic_year && <p className="small">Academic Year {s.academic_year}</p>}
     </div>
   );
 }

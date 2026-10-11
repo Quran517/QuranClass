@@ -12,6 +12,10 @@ import Attendance from './Attendance.jsx';
 import Reports from './Reports.jsx';
 import MyClasses from './MyClasses.jsx';
 import Account from './Account.jsx';
+import IdCards from './IdCards.jsx';
+import Activity from './Activity.jsx';
+import Settings from './Settings.jsx';
+import { loadSettings } from './settings.js';
 
 const TABS = {
   student: [
@@ -22,6 +26,7 @@ const TABS = {
     ['myclasses', 'My Classes'],
     ['attendance', 'Attendance'],
     ['reports', 'Reports'],
+    ['idcards', 'ID Cards'],
     ['account', 'Account'],
   ],
   admin: [
@@ -32,6 +37,9 @@ const TABS = {
     ['users', 'Users'],
     ['attendance', 'Attendance'],
     ['reports', 'Reports'],
+    ['idcards', 'ID Cards'],
+    ['activity', 'Activity'],
+    ['settings', 'Settings'],
     ['account', 'Account'],
   ],
 };
@@ -45,6 +53,7 @@ export default function App() {
   const [profileError, setProfileError] = useState('');
 
   useEffect(() => {
+    loadSettings();
     if (!configured) {
       setLoading(false);
       return;
@@ -131,6 +140,9 @@ export default function App() {
     reports: <Reports profile={profile} />,
     myclasses: <MyClasses profile={profile} go={setTab} />,
     account: <Account profile={profile} onSaved={loadProfile} />,
+    idcards: <IdCards profile={profile} />,
+    activity: <Activity />,
+    settings: <Settings />,
   };
 
   return (
