@@ -1,6 +1,6 @@
 {
   // Cloudflare settings for the Quran class website (static site, free).
-  "name": "qcslisj",
+  "name": "quranclass",
   "compatibility_date": "2026-06-01",
   "assets": {
     "directory": "./dist",
