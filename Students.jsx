@@ -25,7 +25,7 @@ export default function Students() {
   const rows = (list.data || []).filter((s) =>
     (!status || s.status === status) &&
     (!cls || (cls === 'none' ? !s.class_id : s.class_id === cls)) &&
-    (!q || `${s.full_name} ${s.student_code} ${s.guardian_name} ${s.guardian_phone} ${s.email || ''}`.toLowerCase().includes(q.toLowerCase()))
+    (!q || `${s.full_name} ${s.student_code} ${s.admission_no || ''} ${s.guardian_name} ${s.guardian_phone} ${s.email || ''}`.toLowerCase().includes(q.toLowerCase()))
   );
 
   async function save(values, extra) {
@@ -50,12 +50,14 @@ export default function Students() {
       name: 'Students',
       rows: rows.map((s) => ({
         'Student ID': s.student_code,
+        'Admission No': s.admission_no || '',
         Name: s.full_name,
         Gender: s.gender || '',
         'Date of birth': s.date_of_birth || '',
         'School grade': s.school_grade || '',
         'Quran level': s.quran_level || '',
         Class: classById[s.class_id]?.name || '',
+        Group: classById[s.class_id]?.group_name || '',
         Guardian: s.guardian_name || '',
         'Guardian phone': s.guardian_phone || '',
         WhatsApp: s.whatsapp || '',
@@ -78,7 +80,7 @@ export default function Students() {
       </div>
 
       <div className="filters">
-        <input placeholder="Search name, ID, guardian, phone, email…" value={q} onChange={(e) => setQ(e.target.value)} />
+        <input placeholder="Search name, ID, admission no, phone, email…" value={q} onChange={(e) => setQ(e.target.value)} />
         <select value={cls} onChange={(e) => setCls(e.target.value)}>
           <option value="">All classes</option>
           <option value="none">No class</option>
@@ -102,9 +104,9 @@ export default function Students() {
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.id}>
-                    <td className="nowrap">{s.student_code}</td>
+                    <td className="nowrap">{s.student_code}{s.admission_no && <div className="small muted">Adm {s.admission_no}</div>}</td>
                     <td>{s.full_name}{s.status !== 'approved' && <> <span className={`badge ${s.status}`}>{s.status}</span></>}</td>
-                    <td>{classById[s.class_id]?.name || <span className="muted">—</span>}</td>
+                    <td>{classById[s.class_id]?.name || <span className="muted">—</span>}{classById[s.class_id]?.group_name && <div className="small muted">{classById[s.class_id].group_name}</div>}</td>
                     <td className="small">{s.guardian_name}<br />{s.guardian_phone}{s.email && <><br /><a href={`mailto:${s.email}`}>{s.email}</a></>}</td>
                     <td className="nowrap">
                       <button className="btn small ghost" onClick={() => setQr(s)}>QR</button>{' '}

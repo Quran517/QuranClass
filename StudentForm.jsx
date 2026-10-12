@@ -4,6 +4,7 @@ export const EMPTY_STUDENT = {
   full_name: '',
   gender: '',
   date_of_birth: '',
+  admission_no: '',
   school_grade: '',
   quran_level: '',
   guardian_name: '',
@@ -41,6 +42,7 @@ export default function StudentForm({ initial, onSubmit, submitLabel = 'Save', b
   return (
     <form onSubmit={submit} className="form-grid">
       <label className="span2">Student full name *<input required value={f.full_name} onChange={set('full_name')} /></label>
+      <label>School admission number<input placeholder="e.g. 2024/1234" value={f.admission_no || ''} onChange={set('admission_no')} /></label>
       <label>Gender *
         <select required value={f.gender || ''} onChange={set('gender')}>
           <option value="">Select…</option>

@@ -55,6 +55,7 @@ export default function Settings() {
       for (const [k] of FIELDS) values[k] = (f[k] ?? '').toString().trim() || null;
       values.low_attendance_pct = Number(f.low_attendance_pct) || 75;
       values.backup_every_days = Number(f.backup_every_days) || 7;
+      values.allow_signup = f.allow_signup !== false;
       await saveSettings(values);
       setMsg('Settings saved.');
     } catch (e2) {
@@ -71,17 +72,18 @@ export default function Settings() {
         saveFile(`quranclass-backup-${stamp()}.json`, JSON.stringify(b, null, 1), 'application/json');
       } else {
         const cls = Object.fromEntries(b.classes.map((c) => [c.id, c.name]));
+        const grp = Object.fromEntries(b.classes.map((c) => [c.id, c.group_name || '']));
         const stu = Object.fromEntries(b.students.map((x) => [x.id, x]));
         const ppl = Object.fromEntries(b.profiles.map((p) => [p.id, p]));
         await downloadExcel(`quranclass-backup-${stamp()}.xlsx`, [
           { name: 'Students', rows: b.students.map((x) => ({
-            'Student ID': x.student_code, Name: x.full_name, Gender: x.gender || '', 'Date of birth': x.date_of_birth || '',
-            'School grade': x.school_grade || '', 'Quran level': x.quran_level || '', Class: cls[x.class_id] || '',
+            'Student ID': x.student_code, 'Admission No': x.admission_no || '', Name: x.full_name, Gender: x.gender || '', 'Date of birth': x.date_of_birth || '',
+            'School grade': x.school_grade || '', 'Quran level': x.quran_level || '', Class: cls[x.class_id] || '', Group: grp[x.class_id] || '',
             Guardian: x.guardian_name || '', 'Guardian phone': x.guardian_phone || '', WhatsApp: x.whatsapp || '',
             Email: x.email || '', Address: x.address || '', Notes: x.notes || '', Status: x.status,
             Applied: x.created_at?.slice(0, 10) || '', Approved: x.approved_at?.slice(0, 10) || '',
           })) },
-          { name: 'Classes', rows: b.classes.map((c) => ({ Name: c.name, Level: c.level || '', Schedule: c.schedule || '', Teacher: ppl[c.teacher_id]?.full_name || '', 'Teacher ID': ppl[c.teacher_id]?.staff_code || '' })) },
+          { name: 'Classes', rows: b.classes.map((c) => ({ Name: c.name, Group: c.group_name || '', Level: c.level || '', Schedule: c.schedule || '', Teacher: ppl[c.teacher_id]?.full_name || '', 'Teacher ID': ppl[c.teacher_id]?.staff_code || '' })) },
           { name: 'Users', rows: b.profiles.map((p) => ({ Name: p.full_name, 'Teacher ID': p.staff_code || '', Email: p.email, Phone: p.phone || '', Role: p.role, Joined: p.created_at?.slice(0, 10) })) },
           { name: 'Attendance', rows: b.attendance.map((a) => ({ Date: a.att_date, Class: cls[a.class_id] || '', 'Student ID': stu[a.student_id]?.student_code || '', Name: stu[a.student_id]?.full_name || '', Status: a.status, Method: a.method })) },
         ]);
@@ -153,6 +155,10 @@ export default function Settings() {
           </label>
           <label>Remind me to back up every (days)
             <input type="number" min="1" max="90" value={f.backup_every_days} onChange={(e) => setF({ ...f, backup_every_days: e.target.value })} />
+          </label>
+          <label className="check span2">
+            <input type="checkbox" checked={f.allow_signup === false} onChange={(e) => setF({ ...f, allow_signup: !e.target.checked })} />
+            <span><b>Only the admin can create users.</b> Hides "Create an account" on the sign-in page and blocks self sign-up. Create logins under <i>Users</i> instead.</span>
           </label>
           <div className="span2"><button className="btn" disabled={busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save settings'}</button></div>
         </form>

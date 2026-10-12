@@ -26,6 +26,7 @@ export default function Classes() {
     const payload = {
       name: f.get('name').trim(),
       level: f.get('level') || null,
+      group_name: (f.get('group_name') || '').trim() || null,
       schedule: f.get('schedule') || null,
       teacher_id: f.get('teacher_id') || null,
     };
@@ -68,7 +69,7 @@ export default function Classes() {
           {classes.data.map((c) => (
             <button key={c.id} className="class-card" onClick={() => setEditing(c)}>
               <b>{c.name}</b>
-              {c.level && <span className="small muted">{c.level}</span>}
+              {(c.group_name || c.level) && <span className="small muted">{[c.group_name, c.level].filter(Boolean).join(' · ')}</span>}
               {c.schedule && <span className="small">{c.schedule}</span>}
               <span className="small">Teacher: {teacherName(c.teacher_id) || <i className="muted">not assigned</i>}</span>
               <span className="small muted">{countFor(c.id)} students · tap to manage</span>
@@ -81,8 +82,9 @@ export default function Classes() {
         <Modal title={editing.id ? editing.name : 'New class'} onClose={close}>
           <form className="form-grid" onSubmit={save} key={editing.id || 'new'}>
             <label className="span2">Class name *<input name="name" required defaultValue={editing.name || ''} placeholder="e.g. Hifz Boys A" /></label>
+            <label>Group<input name="group_name" defaultValue={editing.group_name || ''} placeholder="e.g. Boys · Group A · Morning" /></label>
             <label>Level<input name="level" defaultValue={editing.level || ''} placeholder="e.g. Beginners / Qaida" /></label>
-            <label>Schedule<input name="schedule" defaultValue={editing.schedule || ''} placeholder="e.g. Sun–Thu 4:00–5:30 pm" /></label>
+            <label className="span2">Schedule<input name="schedule" defaultValue={editing.schedule || ''} placeholder="e.g. Sun–Thu 4:00–5:30 pm" /></label>
             <label className="span2">Teacher
               <select name="teacher_id" defaultValue={editing.teacher_id || ''}>
                 <option value="">Not assigned</option>

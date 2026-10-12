@@ -12,6 +12,7 @@ export const DEFAULT_SETTINGS = {
   card_note: 'If found, please return to SLIS-Jeddah Quran Class.',
   low_attendance_pct: 75,
   backup_every_days: 7,
+  allow_signup: true,
   last_backup_at: null,
 };
 

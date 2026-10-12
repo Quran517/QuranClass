@@ -4,6 +4,7 @@ import { useQuery, fetchMyClasses } from './data.js';
 import { today, formatDate, whatsappLink, STATUS_LABELS } from './util.js';
 import QrScanner from './QrScanner.jsx';
 import { QR_PREFIX } from './StudentQR.jsx';
+import { unlockSound, scanSound, scanVibrate } from './sound.js';
 
 const STATUSES = ['present', 'late', 'absent', 'excused'];
 
@@ -16,7 +17,8 @@ export default function Attendance({ profile }) {
   const [saved, setSaved] = useState({});      // student_id -> status as stored
   const [loading, setLoading] = useState(false);
   const [scanning, setScanning] = useState(false);
-  const [feed, setFeed] = useState([]);        // recent scan results
+  const [feed, setFeed] = useState([]);
+  const [sound, setSound] = useState(() => { try { return localStorage.getItem('qc-scan-sound') !== 'off'; } catch { return true; } });        // recent scan results
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
@@ -76,19 +78,38 @@ export default function Attendance({ profile }) {
     setMarks(next);
   }
 
+  function signal(kind, text) {
+    if (sound) scanSound(kind);
+    scanVibrate(kind);
+    setFeed((f) => [{ ok: kind !== 'error', kind, text, at: Date.now() }, ...f].slice(0, 8));
+  }
+
+  function toggleScanner() {
+    unlockSound(); // the tap lets the phone play beeps
+    setScanning(!scanning);
+  }
+
+  function toggleSound() {
+    const next = !sound;
+    setSound(next);
+    try { localStorage.setItem('qc-scan-sound', next ? 'on' : 'off'); } catch { /* ignore */ }
+    if (next) { unlockSound(); scanSound('ok'); }
+  }
+
   async function onScan(text) {
     const token = text.startsWith(QR_PREFIX) ? text.slice(QR_PREFIX.length) : text;
     if (!/^[0-9a-f-]{36}$/i.test(token)) {
-      setFeed((f) => [{ ok: false, text: 'Not a Quran class QR code', at: Date.now() }, ...f].slice(0, 8));
+      signal('error', 'Not a Quran class student QR code');
       return;
     }
     const { data, error } = await supabase.rpc('mark_attendance_qr', { p_token: token, p_class: classId, p_date: date });
     if (error) {
-      setFeed((f) => [{ ok: false, text: error.message, at: Date.now() }, ...f].slice(0, 8));
+      signal('error', error.message);
     } else {
+      const already = saved[data.student_id] === 'present';
       setMarks((m) => ({ ...m, [data.student_id]: 'present' }));
       setSaved((m) => ({ ...m, [data.student_id]: 'present' }));
-      setFeed((f) => [{ ok: true, text: `${data.full_name} — present`, at: Date.now() }, ...f].slice(0, 8));
+      signal(already ? 'repeat' : 'ok', already ? `${data.full_name} — already marked present` : `${data.full_name} — present`);
     }
   }
 
@@ -114,7 +135,10 @@ export default function Attendance({ profile }) {
             {classes.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
-          <button className={scanning ? 'btn danger' : 'btn'} onClick={() => setScanning(!scanning)}>
+          <button className={sound ? 'btn ghost' : 'btn ghost muted-btn'} onClick={toggleSound} aria-pressed={sound} title="Beep when a code is scanned">
+            {sound ? '🔔 Sound on' : '🔕 Sound off'}
+          </button>
+          <button className={scanning ? 'btn danger' : 'btn'} onClick={toggleScanner}>
             {scanning ? 'Stop scanner' : 'Scan QR codes'}
           </button>
         </div>
@@ -124,7 +148,7 @@ export default function Attendance({ profile }) {
           <div className="scan-area">
             <QrScanner onScan={onScan} />
             <ul className="feed">
-              {feed.map((f) => <li key={f.at} className={f.ok ? 'ok' : 'bad'}>{f.ok ? '✓' : '✕'} {f.text}</li>)}
+              {feed.map((f, i) => <li key={f.at} className={`${f.kind === 'repeat' ? 'repeat' : f.ok ? 'ok' : 'bad'}${i === 0 ? ' latest' : ''}`}>{f.ok ? '✓' : '✕'} {f.text}</li>)}
               {feed.length === 0 && <li className="muted">Point the camera at a student's QR code.</li>}
             </ul>
           </div>

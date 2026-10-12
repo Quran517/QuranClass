@@ -25,7 +25,7 @@ export default function StudentHome({ profile }) {
     if (error) { setErr(error.message); return; }
     setStudent(data);
     if (data?.class_id) {
-      const { data: c } = await supabase.from('classes').select('name, schedule, level').eq('id', data.class_id).maybeSingle();
+      const { data: c } = await supabase.from('classes').select('name, schedule, level, group_name').eq('id', data.class_id).maybeSingle();
       setKlass(c);
     } else setKlass(null);
     if (data) {
@@ -95,8 +95,8 @@ export default function StudentHome({ profile }) {
           <p className="muted small">Save this to your phone or print it. Keep it private: it marks you present.</p>
           <StudentQR student={student} />
           <h3>My ID card</h3>
-          <div className="card-preview"><PrintCards people={[studentToCard(student, klass?.name)]} withBack /></div>
-          <p><button className="btn ghost" onClick={printCards}>Print my ID card</button></p>
+          <div className="card-preview"><PrintCards people={[studentToCard(student, klass)]} withBack /></div>
+          <p><button className="btn ghost" onClick={() => printCards('a4')}>Print my ID card</button></p>
         </section>
       )}
 

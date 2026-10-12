@@ -15,6 +15,7 @@ export function Brand() {
 }
 
 export default function Auth() {
+  const settings = useSettings();
   const [mode, setMode] = useState('signin'); // signin | signup | forgot
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,7 +32,14 @@ export default function Auth() {
     setErr('');
     try {
       if (mode === 'signin') {
-        const { error } = await supabase.auth.signInWithPassword({ email, password });
+        let loginEmail = email.trim();
+        if (!loginEmail.includes('@')) {
+          const { data, error: e1 } = await supabase.rpc('login_email', { p_login: loginEmail });
+          if (e1) throw new Error(e1.message.includes('login_email') ? 'Sign in with ID or phone is not set up yet. Please use your email.' : e1.message);
+          if (!data) throw new Error('No account found for that ID or phone number. Check it, or sign in with your email.');
+          loginEmail = data;
+        }
+        const { error } = await supabase.auth.signInWithPassword({ email: loginEmail, password });
         if (error) throw error;
       } else if (mode === 'signup') {
         const { data, error } = await supabase.auth.signUp({
@@ -48,14 +56,15 @@ export default function Auth() {
           setMode('signin');
         }
       } else {
-        const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        if (!email.includes('@')) throw new Error('Password reset by email needs an email address. If you sign in with an ID or phone number, ask the class admin to reset your password.');
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: window.location.origin,
         });
         if (error) throw error;
         setMsg('If that email has an account, a password reset link has been sent.');
       }
     } catch (e2) {
-      setErr(e2.message === 'Invalid login credentials' ? 'Email or password is incorrect.' : e2.message);
+      setErr(e2.message === 'Invalid login credentials' ? 'Login or password is incorrect.' : e2.message.includes('Database error saving new user') ? 'New accounts can only be created by the class admin. Please contact the admin.' : e2.message);
     } finally {
       setBusy(false);
     }
@@ -80,7 +89,14 @@ export default function Auth() {
               <label>Mobile / WhatsApp<input required inputMode="tel" placeholder="05xxxxxxxx" value={phone} onChange={(e) => setPhone(e.target.value)} /></label>
             </>
           )}
-          <label>Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          {mode === 'signin' ? (
+            <label>Email, User ID or phone number
+              <input required autoComplete="username" autoCapitalize="none" placeholder="e.g. QC1001, TC1001, 05xxxxxxxx or email"
+                value={email} onChange={(e) => setEmail(e.target.value)} />
+            </label>
+          ) : (
+            <label>Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          )}
           {mode !== 'forgot' && (
             <label>Password
               <input required type="password" minLength={6}
@@ -98,7 +114,8 @@ export default function Auth() {
 
           <div className="auth-links">
             {mode !== 'signin' && <button type="button" className="link" onClick={() => setMode('signin')}>Back to sign in</button>}
-            {mode === 'signin' && <button type="button" className="link" onClick={() => setMode('signup')}>New here? Create an account</button>}
+            {mode === 'signin' && settings.allow_signup !== false && <button type="button" className="link" onClick={() => setMode('signup')}>New here? Create an account</button>}
+            {mode === 'signin' && settings.allow_signup === false && <p className="small muted center">New students and teachers: please ask the class admin for your login.</p>}
             {mode === 'signin' && <button type="button" className="link" onClick={() => setMode('forgot')}>Forgot password?</button>}
           </div>
         </form>

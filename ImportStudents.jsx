@@ -4,6 +4,7 @@ import { supabase } from './supabase.js';
 // Column names people are likely to use in their sheet → database field.
 const HEADERS = {
   full_name: ['name', 'full name', 'student name', 'student', 'full_name', 'student full name'],
+  admission_no: ['admission no', 'admission number', 'adm no', 'adm. no', 'adm', 'admission', 'school admission number', 'school admission no', 'admission_no', 'admn no', 'gr no'],
   gender: ['gender', 'sex', 'boy/girl'],
   date_of_birth: ['date of birth', 'dob', 'birth date', 'birthday', 'date_of_birth'],
   school_grade: ['grade', 'school grade', 'class at school', 'school_grade'],
@@ -18,7 +19,7 @@ const HEADERS = {
 };
 
 const TEMPLATE_COLUMNS = [
-  'Full name', 'Gender', 'Date of birth', 'School grade', 'Quran level',
+  'Full name', 'Admission No', 'Gender', 'Date of birth', 'School grade', 'Quran level',
   'Guardian name', 'Guardian phone', 'WhatsApp', 'Email', 'Address', 'Class', 'Notes',
 ];
 
@@ -56,7 +57,7 @@ export async function downloadTemplate() {
   const XLSX = await import('xlsx');
   const ws = XLSX.utils.aoa_to_sheet([
     TEMPLATE_COLUMNS,
-    ['Abdullah Ahmed', 'Male', '15/03/2015', 'Grade 5', 'Juz 30', 'Ahmed Ali', '0551234567', '0551234567', 'parent@example.com', 'Al Safa', '', ''],
+    ['Abdullah Ahmed', '2024/1234', 'Male', '15/03/2015', 'Grade 5', 'Juz 30', 'Ahmed Ali', '0551234567', '0551234567', 'parent@example.com', 'Al Safa', '', ''],
   ]);
   ws['!cols'] = TEMPLATE_COLUMNS.map((c) => ({ wch: Math.max(14, c.length + 4) }));
   const wb = XLSX.utils.book_new();
@@ -100,6 +101,7 @@ export default function ImportStudents({ classes, fixedClassId = null, onDone })
         for (const [h, f] of Object.entries(map)) if (f) o[f] = r[h];
         const student = {
           full_name: text(o.full_name),
+          admission_no: text(o.admission_no),
           gender: toGender(o.gender),
           date_of_birth: toDate(o.date_of_birth),
           school_grade: text(o.school_grade),
@@ -190,12 +192,13 @@ export default function ImportStudents({ classes, fixedClassId = null, onDone })
           </p>
           <div className="table-wrap preview">
             <table>
-              <thead><tr><th>Row</th><th>Name</th><th>Gender</th><th>Guardian</th><th>Phone</th><th>Email</th><th>Class</th></tr></thead>
+              <thead><tr><th>Row</th><th>Name</th><th>Adm No</th><th>Gender</th><th>Guardian</th><th>Phone</th><th>Email</th><th>Class</th></tr></thead>
               <tbody>
                 {rows.map((r) => (
                   <tr key={r.line} className={r.problems.length ? 'warn' : ''}>
                     <td>{r.line}{r.problems.length > 0 && <span title={r.problems.join(', ')}> ⚠</span>}</td>
                     <td>{r.student.full_name || <i className="muted">missing</i>}</td>
+                    <td>{r.student.admission_no || ''}</td>
                     <td className="cap">{r.student.gender || ''}</td>
                     <td>{r.student.guardian_name || ''}</td>
                     <td>{r.student.guardian_phone || ''}</td>

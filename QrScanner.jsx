@@ -24,7 +24,6 @@ export default function QrScanner({ onScan }) {
             const now = Date.now();
             if (text === last.current.text && now - last.current.at < 4000) return;
             last.current = { text, at: now };
-            if (navigator.vibrate) navigator.vibrate(80);
             cb.current(text);
           },
           () => {}

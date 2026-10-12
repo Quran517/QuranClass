@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery } from './data.js';
-import { formatDate, whatsappLink } from './util.js';
+import { formatDate, whatsappLink, realEmail } from './util.js';
 import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
 
@@ -10,13 +10,15 @@ function makePassword() {
   return words[Math.floor(Math.random() * words.length)] + (1000 + Math.floor(Math.random() * 9000));
 }
 
-function loginMessage({ full_name, email, password, role, staff_code }) {
+function loginMessage({ full_name, email, password, role, staff_code, student_code, phone }) {
+  const id = staff_code || student_code;
   return (
     `Assalamu Alaikum ${full_name || ''},\n\n` +
     `Your ${getSettings().school_name} ${role} login is ready.\n` +
-    (staff_code ? `Teacher ID: ${staff_code}\n` : '') +
     `Website: ${window.location.origin}\n` +
-    `Email: ${email}\n` +
+    (id ? `User ID: ${id}\n` : '') +
+    (realEmail(email) ? `Email: ${email}\n` : '') +
+    `Sign in with your ${[id && 'User ID', phone && 'phone number', realEmail(email) && 'email'].filter(Boolean).join(' or ')}.\n` +
     `Password: ${password}\n\n` +
     `Please sign in and change your password under "Account".`
   );
@@ -24,6 +26,8 @@ function loginMessage({ full_name, email, password, role, staff_code }) {
 
 export default function Users({ me }) {
   const list = useQuery(() => supabase.from('profiles').select('*').order('created_at', { ascending: false }));
+  const linked = useQuery(() => supabase.from('students').select('profile_id, student_code').not('profile_id', 'is', null));
+  const studentCode = Object.fromEntries((linked.data || []).map((s) => [s.profile_id, s.student_code]));
   const freeStudents = useQuery(() =>
     supabase.from('students').select('id, full_name, student_code, email, guardian_phone, whatsapp')
       .is('profile_id', null).neq('status', 'rejected').order('full_name'));
@@ -77,11 +81,12 @@ export default function Users({ me }) {
     setBusy(false);
     if (error) {
       setErr(error.message.includes('admin_create_user')
-        ? 'The database update has not been installed yet. Run update-2.sql in Supabase → SQL Editor.'
+        ? 'The database update has not been installed yet. Run update-5.sql in Supabase → SQL Editor.'
         : error.message);
       return;
     }
-    setCreated({ ...c, email: data.email, staff_code: data.staff_code });
+    setCreated({ ...c, email: data.email, staff_code: data.staff_code, student_code: data.student_code });
+    linked.reload();
     setCreating(null);
     list.reload(); freeStudents.reload();
   }
@@ -93,13 +98,13 @@ export default function Users({ me }) {
     const { error } = await supabase.rpc('admin_set_password', { p_user: resetting.id, p_password: password });
     setBusy(false);
     if (error) { setErr(error.message); return; }
-    setCreated({ full_name: resetting.full_name, email: resetting.email, password, role: resetting.role, staff_code: resetting.staff_code, reset: true, phone: resetting.phone });
+    setCreated({ full_name: resetting.full_name, email: resetting.email, password, role: resetting.role, staff_code: resetting.staff_code, student_code: studentCode[resetting.id], reset: true, phone: resetting.phone });
     setResetting(null);
   }
 
   const rows = (list.data || []).filter((p) =>
     (!role || p.role === role) &&
-    (!q || `${p.full_name} ${p.email} ${p.phone} ${p.staff_code || ''}`.toLowerCase().includes(q.toLowerCase()))
+    (!q || `${p.full_name} ${p.email} ${p.phone} ${p.staff_code || ''} ${studentCode[p.id] || ''}`.toLowerCase().includes(q.toLowerCase()))
   );
 
   return (
@@ -112,7 +117,7 @@ export default function Users({ me }) {
         </div>
       </div>
       <p className="muted small">
-        Create logins here: they work straight away and no email is sent. Teachers get a Teacher ID automatically.
+        Create logins here: they work straight away and no email is sent. Email is optional — people can sign in with their User ID (TC… / QC…) or phone number. Teachers get a Teacher ID automatically.
         Then assign each teacher a class under <b>Classes</b>.
       </p>
       <div className="filters">
@@ -137,8 +142,8 @@ export default function Users({ me }) {
                 return (
                   <tr key={p.id}>
                     <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}</td>
-                    <td className="nowrap">{p.staff_code || <span className="muted">—</span>}</td>
-                    <td className="small">{p.email}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
+                    <td className="nowrap"><b>{p.staff_code || studentCode[p.id] || <span className="muted">—</span>}</b></td>
+                    <td className="small">{realEmail(p.email) || <span className="muted">no email</span>}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
                     <td className="small nowrap">{formatDate(p.created_at)}</td>
                     <td>
                       <select value={p.role} onChange={(e) => changeRole(p, e.target.value)} aria-label={`Role for ${p.full_name || p.email}`}>
@@ -178,7 +183,7 @@ export default function Users({ me }) {
             ) : <div />}
             <label>Full name *<input required value={creating.full_name} onChange={(e) => setCreating({ ...creating, full_name: e.target.value })} /></label>
             <label>Mobile / WhatsApp<input inputMode="tel" placeholder="05xxxxxxxx" value={creating.phone} onChange={(e) => setCreating({ ...creating, phone: e.target.value })} /></label>
-            <label>Email (used to sign in) *<input required type="email" value={creating.email} onChange={(e) => setCreating({ ...creating, email: e.target.value })} /></label>
+            <label>Email (optional)<input type="email" placeholder="leave empty to sign in with ID / phone" value={creating.email} onChange={(e) => setCreating({ ...creating, email: e.target.value })} /></label>
             <label>Starting password *
               <div className="input-row">
                 <input required minLength={6} value={creating.password} onChange={(e) => setCreating({ ...creating, password: e.target.value })} />
@@ -194,7 +199,7 @@ export default function Users({ me }) {
       {resetting && (
         <Modal title={`Password for ${resetting.full_name || resetting.email}`} onClose={() => setResetting(null)}>
           <form className="form-grid" onSubmit={resetPassword}>
-            <p className="span2 small muted">Sign-in email: <b>{resetting.email}</b>. Set a new password and share it with them. No email is sent.</p>
+            <p className="span2 small muted">Signs in with: <b>{[resetting.staff_code || studentCode[resetting.id], resetting.phone, realEmail(resetting.email)].filter(Boolean).join(' / ')}</b>. Set a new password and share it with them. No email is sent.</p>
             <label className="span2">New password *<input name="password" required minLength={6} defaultValue={makePassword()} /></label>
             {err && <p className="error span2">{err}</p>}
             <div className="span2 actions">
@@ -209,9 +214,10 @@ export default function Users({ me }) {
         <Modal title={created.reset ? 'Password changed' : 'Login created'} onClose={() => setCreated(null)}>
           <dl className="details">
             <dt>Name</dt><dd>{created.full_name}</dd>
-            {created.staff_code && <><dt>Teacher ID</dt><dd><b>{created.staff_code}</b></dd></>}
+            {(created.staff_code || created.student_code) && <><dt>User ID</dt><dd><b>{created.staff_code || created.student_code}</b></dd></>}
             <dt>Website</dt><dd>{window.location.origin}</dd>
-            <dt>Email</dt><dd>{created.email}</dd>
+            {created.phone && <><dt>Phone</dt><dd>{created.phone}</dd></>}
+            {realEmail(created.email) && <><dt>Email</dt><dd>{created.email}</dd></>}
             <dt>Password</dt><dd><code>{created.password}</code></dd>
           </dl>
           <p className="small muted">Share these details with them now. The password is not shown again.</p>

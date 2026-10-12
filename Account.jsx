@@ -1,10 +1,19 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import { realEmail } from './util.js';
 
 export default function Account({ profile, onSaved }) {
   const [name, setName] = useState(profile.full_name || '');
   const [phone, setPhone] = useState(profile.phone || '');
   const [pw, setPw] = useState('');
+  const [studentCode, setStudentCode] = useState('');
+
+  useEffect(() => {
+    if (profile.role !== 'student') return;
+    supabase.from('students').select('student_code').eq('profile_id', profile.id).maybeSingle()
+      .then(({ data }) => setStudentCode(data?.student_code || ''));
+  }, [profile.id, profile.role]);
+  const userId = profile.staff_code || studentCode;
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
 
@@ -26,7 +35,12 @@ export default function Account({ profile, onSaved }) {
     <>
       <section className="card">
         <h2>My account</h2>
-        <p className="muted small">{profile.email} · {profile.role}</p>
+        <dl className="details">
+          {userId && <><dt>User ID</dt><dd><b>{userId}</b></dd></>}
+          <dt>Role</dt><dd className="cap">{profile.role}</dd>
+          <dt>Email</dt><dd>{realEmail(profile.email) || <span className="muted">none — sign in with your User ID or phone</span>}</dd>
+        </dl>
+        <p className="small muted">You can sign in with {[userId && `your User ID (${userId})`, 'your phone number', realEmail(profile.email) && 'your email'].filter(Boolean).join(', ')}.</p>
         {err && <p className="error">{err}</p>}
         {msg && <p className="success">{msg}</p>}
         <form className="form-grid" onSubmit={saveProfile}>

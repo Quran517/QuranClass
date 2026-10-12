@@ -44,3 +44,7 @@ export function errorText(err) {
   if (!err) return '';
   return err.message || String(err);
 }
+
+// Logins made without an email get a hidden placeholder address.
+export const isPlaceholderEmail = (e) => /@noemail\.quranclass\.local$/i.test(e || '');
+export const realEmail = (e) => (isPlaceholderEmail(e) ? '' : e || '');

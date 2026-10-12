@@ -83,7 +83,7 @@ export default function Admissions() {
               <div key={s.id} className="list-item">
                 <div className="row-between">
                   <div>
-                    <b>{s.full_name}</b> <span className="muted small">{s.student_code}</span>
+                    <b>{s.full_name}</b> <span className="muted small">{s.student_code}{s.admission_no ? ` · Adm ${s.admission_no}` : ''}</span>
                     <div className="small muted">
                       {s.gender && <span className="cap">{s.gender}</span>}
                       {s.date_of_birth && <> · born {formatDate(s.date_of_birth)}</>}
