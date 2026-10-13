@@ -4,7 +4,7 @@ import { useQuery } from './data.js';
 import { formatDate, whatsappLink, realEmail } from './util.js';
 import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
-import { AREAS } from './perms.js';
+import { AREAS, ASSISTANT_PERMS, roleLabel } from './perms.js';
 
 function makePassword() {
   const words = ['Noor', 'Huda', 'Iqra', 'Sabr', 'Ilm', 'Amal', 'Rahma', 'Taqwa'];
@@ -15,7 +15,7 @@ function loginMessage({ full_name, email, password, role, staff_code, student_co
   const id = staff_code || student_code;
   return (
     `Assalamu Alaikum ${full_name || ''},\n\n` +
-    `Your ${getSettings().school_name} ${role} login is ready.\n` +
+    `Your ${getSettings().school_name} ${role === "assistant" ? "Admin assistant" : role} login is ready.\n` +
     `Website: ${window.location.origin}\n` +
     (id ? `User ID: ${id}\n` : '') +
     (realEmail(email) ? `Email: ${email}\n` : '') +
@@ -57,12 +57,23 @@ export default function Users({ me }) {
     list.reload();
   }
 
-  async function changeRole(p, newRole) {
+  async function changeRole(p, choice) {
     setErr(''); setSaved('');
-    if (p.id === me.id && newRole !== 'admin' && !window.confirm('You are removing your own admin access. Continue?')) return;
-    const { error } = await supabase.from('profiles').update({ role: newRole }).eq('id', p.id);
+    if (p.id === me.id && choice !== 'admin' && !window.confirm('You are removing your own admin access. Continue?')) return;
+    const newRole = choice === 'assistant' ? 'teacher' : choice;
+    const update = { role: newRole };
+    if (meAdmin && newRole === 'teacher') {
+      update.staff_title = choice === 'assistant' ? 'assistant' : null;
+      if (choice === 'assistant') update.permissions = ASSISTANT_PERMS;
+      else if (p.staff_title === 'assistant') update.permissions = [];
+    }
+    let { error } = await supabase.from('profiles').update(update).eq('id', p.id);
+    if (error && /staff_title/.test(error.message)) {
+      setErr('The Admin assistant type is not installed yet. Run update-10.sql in Supabase → SQL Editor.');
+      return;
+    }
     if (error) setErr(error.message);
-    else { setSaved(`${p.full_name || p.email} is now ${newRole}.`); list.reload(); }
+    else { setSaved(`${p.full_name || p.email} is now ${choice === 'assistant' ? 'an Admin assistant' : newRole}.`); list.reload(); }
   }
 
   async function removeLogin(p) {
@@ -91,10 +102,14 @@ export default function Users({ me }) {
     e.preventDefault();
     setBusy(true); setErr('');
     const c = creating;
-    const { data, error } = await supabase.rpc('admin_create_user', {
+    let { data, error } = await supabase.rpc('admin_create_user', {
       p_email: c.email, p_password: c.password, p_full_name: c.full_name, p_phone: c.phone || null,
-      p_role: c.role, p_student_id: c.role === 'student' && c.student_id ? c.student_id : null,
+      p_role: c.role === 'assistant' ? 'teacher' : c.role, p_student_id: c.role === 'student' && c.student_id ? c.student_id : null,
     });
+    if (!error && c.role === 'assistant') {
+      const { error: e2 } = await supabase.from('profiles').update({ staff_title: 'assistant', permissions: ASSISTANT_PERMS }).eq('id', data.id);
+      if (e2) error = { message: /staff_title/.test(e2.message) ? 'Login created as Teacher. Run update-10.sql in Supabase to enable Admin assistants, then change the type under Users.' : e2.message };
+    }
     setBusy(false);
     if (error) {
       setErr(error.message.includes('admin_create_user')
@@ -158,15 +173,16 @@ export default function Users({ me }) {
                 const wa = whatsappLink(p.phone, `Assalamu Alaikum ${p.full_name || ''},`);
                 return (
                   <tr key={p.id}>
-                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}</td>
+                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}<div className="small muted">{roleLabel(p)}</div></td>
                     <td className="nowrap"><b>{p.staff_code || studentCode[p.id] || <span className="muted">—</span>}</b></td>
                     <td className="small">{realEmail(p.email) || <span className="muted">no email</span>}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
                     <td className="small nowrap">{formatDate(p.created_at)}</td>
                     <td>
-                      <select value={p.role} disabled={!meAdmin && (p.role === 'admin' || p.id === me.id)}
+                      <select value={p.role === 'teacher' && p.staff_title === 'assistant' ? 'assistant' : p.role} disabled={!meAdmin && (p.role === 'admin' || p.id === me.id)}
                         onChange={(e) => changeRole(p, e.target.value)} aria-label={`Role for ${p.full_name || p.email}`}>
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
+                        {(meAdmin || p.staff_title === 'assistant') && <option value="assistant">Admin assistant</option>}
                         {(meAdmin || p.role === 'admin') && <option value="admin">Admin</option>}
                       </select>
                       {p.role === 'teacher' && (p.permissions || []).length > 0 && (
@@ -190,15 +206,19 @@ export default function Users({ me }) {
       )}
 
       {creating && (
-        <Modal title={creating.role === 'student' ? 'Create student login' : creating.role === 'admin' ? 'Create admin login' : 'Create teacher login'} onClose={() => setCreating(null)}>
+        <Modal title={creating.role === 'student' ? 'Create student login' : creating.role === 'admin' ? 'Create admin login' : creating.role === 'assistant' ? 'Create Admin assistant login' : 'Create teacher login'} onClose={() => setCreating(null)}>
           <form className="form-grid" onSubmit={create}>
             <label>Login type
               <select value={creating.role} onChange={(e) => setCreating({ ...creating, role: e.target.value })}>
                 <option value="teacher">Teacher</option>
+                {meAdmin && <option value="assistant">Admin assistant</option>}
                 <option value="student">Student / parent</option>
                 {meAdmin && <option value="admin">Admin</option>}
               </select>
             </label>
+            {creating.role === 'assistant' && (
+              <p className="span2 small notice-inline">An <b>Admin assistant</b> can use everything except <b>Users</b> and <b>Settings</b>. You can adjust this later with the <b>Access</b> button.</p>
+            )}
             {creating.role === 'student' ? (
               <label>Link to student record
                 <select value={creating.student_id} onChange={(e) => pickStudent(e.target.value)}>

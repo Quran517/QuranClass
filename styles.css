@@ -321,3 +321,23 @@ tr.warn td { background: var(--amber-bg); }
 /* ---------- logo settings ---------- */
 .logo-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .logo-preview { width: 96px; height: 96px; object-fit: contain; border-radius: 12px; background: var(--bg); border: 1px solid var(--line); padding: 6px; }
+
+/* ---------- messages ---------- */
+.msg-preview { background: var(--bg); border-radius: 10px; padding: 10px 12px; margin: 10px 0; }
+.msg-preview pre { white-space: pre-wrap; font-family: inherit; margin: 6px 0 0; font-size: .92rem; }
+.msg-list .pick-row { justify-content: space-between; cursor: default; }
+.msg-list .pick-row.done { background: var(--green-bg); }
+.btn.disabled { opacity: .5; pointer-events: none; }
+.notice-inline { background: var(--blue-bg); color: var(--navy); padding: 8px 12px; border-radius: 8px; }
+
+/* ---------- team & staff ---------- */
+.team-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 12px; }
+.team-card { border: 1px solid var(--line); border-left: 4px solid var(--navy); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 10px; background: #fff; }
+.team-top { display: flex; gap: 12px; align-items: center; }
+.team-avatar { width: 46px; height: 46px; border-radius: 50%; background: var(--navy); color: #fff; display: grid; place-items: center; font-weight: 700; flex: none; border: 2px solid var(--orange); }
+.team-role { color: var(--orange); font-weight: 600; font-size: .9rem; }
+.team-contacts { display: flex; flex-direction: column; gap: 4px; font-size: .92rem; }
+.team-contacts a { text-decoration: none; overflow-wrap: anywhere; }
+.team-card .btn { align-self: flex-start; }
+.checkin { border-left: 4px solid var(--green); }
+.badge.leave { background: #eef0f4; color: #556; }

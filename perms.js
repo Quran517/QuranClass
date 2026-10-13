@@ -8,11 +8,24 @@ export const AREAS = [
   ['attendance', 'Attendance', 'Take attendance for ALL classes (not just their own)'],
   ['reports', 'Reports', 'Reports for ALL classes'],
   ['idcards', 'ID Cards', 'Print ID cards for ALL students and staff'],
+  ['staffatt', 'Staff Attendance', 'Mark and report teachers\' attendance'],
+  ['team', 'QTC Team', 'Edit the team list (names, responsibilities, contacts)'],
+  ['messages', 'Messages', 'Send email / WhatsApp messages to parents'],
   ['activity', 'Activity', 'See the activity log'],
   ['settings', 'Settings', 'Change settings, download and restore backups'],
 ];
 
+// Ready-made access for an "Admin assistant": everything except Users and Settings.
+export const ASSISTANT_PERMS = ['dashboard', 'admissions', 'students', 'classes', 'attendance', 'staffatt', 'reports', 'idcards', 'messages', 'team', 'activity'];
+
 export const isAdmin = (profile) => profile?.role === 'admin';
+
+export function roleLabel(p) {
+  if (!p) return '';
+  if (p.role === 'admin') return 'Admin';
+  if (p.role === 'teacher') return p.staff_title === 'assistant' ? 'Admin assistant' : 'Teacher';
+  return 'Student';
+}
 
 // Can this person use an area for everyone (not just their own class)?
 export function can(profile, area) {

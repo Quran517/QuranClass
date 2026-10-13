@@ -15,12 +15,16 @@ import Account from './Account.jsx';
 import IdCards from './IdCards.jsx';
 import Activity from './Activity.jsx';
 import Settings from './Settings.jsx';
+import Messages from './Messages.jsx';
+import Team from './Team.jsx';
+import StaffAttendance from './StaffAttendance.jsx';
 import { loadSettings } from './settings.js';
 import { AREAS } from './perms.js';
 
 const TABS = {
   student: [
     ['home', 'My Admission'],
+    ['team', 'QTC Team'],
     ['account', 'Account'],
   ],
   teacher: [
@@ -28,6 +32,8 @@ const TABS = {
     ['attendance', 'Attendance'],
     ['reports', 'Reports'],
     ['idcards', 'ID Cards'],
+    ['messages', 'Messages'],
+    ['team', 'QTC Team'],
     ['account', 'Account'],
   ],
   admin: [
@@ -37,8 +43,11 @@ const TABS = {
     ['classes', 'Classes'],
     ['users', 'Users'],
     ['attendance', 'Attendance'],
+    ['staffatt', 'Staff Attendance'],
     ['reports', 'Reports'],
     ['idcards', 'ID Cards'],
+    ['messages', 'Messages'],
+    ['team', 'QTC Team'],
     ['activity', 'Activity'],
     ['settings', 'Settings'],
     ['account', 'Account'],
@@ -154,6 +163,9 @@ export default function App() {
     idcards: <IdCards profile={profile} />,
     activity: <Activity />,
     settings: <Settings />,
+    messages: <Messages profile={profile} />,
+    team: <Team profile={profile} />,
+    staffatt: <StaffAttendance />,
   };
 
   return (

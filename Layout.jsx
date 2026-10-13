@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useSettings, logoOf } from './settings.js';
+import { roleLabel } from './perms.js';
 
-const ROLE_LABEL = { student: 'Student', teacher: 'Teacher', admin: 'Admin' };
 
 export default function Layout({ profile, tabs, current, onTab, children }) {
   const [open, setOpen] = useState(false);
@@ -16,7 +16,7 @@ export default function Layout({ profile, tabs, current, onTab, children }) {
             <img className="brand-logo" src={logoOf(settings)} alt="" />
             <div>
               <div className="brand-name">{settings.school_name}</div>
-              <div className="brand-sub">{profile.full_name || profile.email} · {ROLE_LABEL[profile.role]}{profile.staff_code ? ` · ${profile.staff_code}` : ''}</div>
+              <div className="brand-sub">{profile.full_name || profile.email} · {roleLabel(profile)}{profile.staff_code ? ` · ${profile.staff_code}` : ''}</div>
             </div>
           </div>
           <button className="menu-btn" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)}>☰</button>

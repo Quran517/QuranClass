@@ -1,6 +1,7 @@
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
 import { whatsappLink } from './util.js';
+import CheckIn from './CheckIn.jsx';
 
 export default function MyClasses({ profile, go }) {
   const classes = useQuery(() => fetchMyClasses(profile, 'myclasses'), [profile.id]);
@@ -10,11 +11,12 @@ export default function MyClasses({ profile, go }) {
 
   if (classes.loading || students.loading) return <div className="spinner" />;
   if (!classes.data.length) {
-    return <section className="card"><h2>My classes</h2><p className="muted">You have not been assigned a class yet. Please ask the admin.</p></section>;
+    return <><CheckIn profile={profile} /><section className="card"><h2>My classes</h2><p className="muted">You have not been assigned a class yet. Please ask the admin.</p></section></>;
   }
 
   return (
     <>
+      <CheckIn profile={profile} />
       {classes.data.map((c) => {
         const list = students.data.filter((s) => s.class_id === c.id);
         return (
