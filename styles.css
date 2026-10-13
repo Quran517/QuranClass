@@ -341,3 +341,4 @@ tr.warn td { background: var(--amber-bg); }
 .team-card .btn { align-self: flex-start; }
 .checkin { border-left: 4px solid var(--green); }
 .badge.leave { background: #eef0f4; color: #556; }
+.sep { border: 0; border-top: 1px solid var(--line); margin: 6px 0 14px; }

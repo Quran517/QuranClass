@@ -48,3 +48,16 @@ export function errorText(err) {
 // Logins made without an email get a hidden placeholder address.
 export const isPlaceholderEmail = (e) => /@noemail\.quranclass\.local$/i.test(e || '');
 export const realEmail = (e) => (isPlaceholderEmail(e) ? '' : e || '');
+
+// Usernames: 3–40 letters, numbers or . _ + -  (a phone number like 0551234567 is fine)
+export const USERNAME_RULE = /^[A-Za-z0-9._+-]{3,40}$/;
+export function cleanUsername(v) {
+  return String(v || '').trim().replace(/\s+/g, '');
+}
+export function usernameError(e) {
+  const m = e?.message || '';
+  if (/profiles_username_key|duplicate key/.test(m)) return 'That username is already taken. Please choose another.';
+  if (/profiles_username_format/.test(m)) return 'Username can only use letters, numbers and . _ + - (3 to 40 characters, no spaces).';
+  if (/username/.test(m) && /column/.test(m)) return 'Usernames are not installed yet. Run update-12.sql in Supabase → SQL Editor.';
+  return m;
+}

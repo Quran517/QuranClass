@@ -90,8 +90,8 @@ export default function Auth() {
             </>
           )}
           {mode === 'signin' ? (
-            <label>Email, User ID or phone number
-              <input required autoComplete="username" autoCapitalize="none" placeholder="e.g. QC1001, TC1001, 05xxxxxxxx or email"
+            <label>Username, User ID, phone or email
+              <input required autoComplete="username" autoCapitalize="none" placeholder="e.g. 0551234567, TC1001, QC1001 or email"
                 value={email} onChange={(e) => setEmail(e.target.value)} />
             </label>
           ) : (

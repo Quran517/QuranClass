@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery } from './data.js';
-import { formatDate, whatsappLink, realEmail } from './util.js';
+import { formatDate, whatsappLink, realEmail, cleanUsername, USERNAME_RULE, usernameError } from './util.js';
 import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
 import { AREAS, ASSISTANT_PERMS, roleLabel } from './perms.js';
@@ -11,15 +11,16 @@ function makePassword() {
   return words[Math.floor(Math.random() * words.length)] + (1000 + Math.floor(Math.random() * 9000));
 }
 
-function loginMessage({ full_name, email, password, role, staff_code, student_code, phone }) {
+function loginMessage({ full_name, email, password, role, staff_code, student_code, phone, username }) {
   const id = staff_code || student_code;
   return (
     `Assalamu Alaikum ${full_name || ''},\n\n` +
     `Your ${getSettings().school_name} ${role === "assistant" ? "Admin assistant" : role} login is ready.\n` +
     `Website: ${window.location.origin}\n` +
+    (username ? `Username: ${username}\n` : '') +
     (id ? `User ID: ${id}\n` : '') +
     (realEmail(email) ? `Email: ${email}\n` : '') +
-    `Sign in with your ${[id && 'User ID', phone && 'phone number', realEmail(email) && 'email'].filter(Boolean).join(' or ')}.\n` +
+    `Sign in with your ${[username && 'username', id && 'User ID', phone && 'phone number', realEmail(email) && 'email'].filter(Boolean).join(' or ')}.\n` +
     `Password: ${password}\n\n` +
     `Please sign in and change your password under "Account".`
   );
@@ -106,6 +107,13 @@ export default function Users({ me }) {
       p_email: c.email, p_password: c.password, p_full_name: c.full_name, p_phone: c.phone || null,
       p_role: c.role === 'assistant' ? 'teacher' : c.role, p_student_id: c.role === 'student' && c.student_id ? c.student_id : null,
     });
+    if (!error && cleanUsername(c.username)) {
+      const u = cleanUsername(c.username);
+      const { error: e3 } = USERNAME_RULE.test(u)
+        ? await supabase.from('profiles').update({ username: u }).eq('id', data.id)
+        : { error: { message: 'profiles_username_format' } };
+      if (e3) error = { message: `Login created, but the username was not saved: ${usernameError(e3)} Set it with the Login button.` };
+    }
     if (!error && c.role === 'assistant') {
       const { error: e2 } = await supabase.from('profiles').update({ staff_title: 'assistant', permissions: ASSISTANT_PERMS }).eq('id', data.id);
       if (e2) error = { message: /staff_title/.test(e2.message) ? 'Login created as Teacher. Run update-10.sql in Supabase to enable Admin assistants, then change the type under Users.' : e2.message };
@@ -117,10 +125,24 @@ export default function Users({ me }) {
         : error.message);
       return;
     }
-    setCreated({ ...c, email: data.email, staff_code: data.staff_code, student_code: data.student_code });
+    setCreated({ ...c, username: cleanUsername(c.username) || null, email: data.email, staff_code: data.staff_code, student_code: data.student_code });
     linked.reload();
     setCreating(null);
     list.reload(); freeStudents.reload();
+  }
+
+  async function saveUsernameFor(e) {
+    e.preventDefault();
+    setErr(''); setSaved('');
+    const u = cleanUsername(new FormData(e.target).get('username'));
+    if (u && !USERNAME_RULE.test(u)) { setErr('Username can only use letters, numbers and . _ + - (3 to 40 characters, no spaces).'); return; }
+    setBusy(true);
+    const { error } = await supabase.from('profiles').update({ username: u || null }).eq('id', resetting.id);
+    setBusy(false);
+    if (error) { setErr(usernameError(error)); return; }
+    setSaved(u ? `${resetting.full_name || 'User'} can now sign in with username "${u}".` : 'Username removed.');
+    setResetting({ ...resetting, username: u || null });
+    list.reload();
   }
 
   async function resetPassword(e) {
@@ -130,13 +152,13 @@ export default function Users({ me }) {
     const { error } = await supabase.rpc('admin_set_password', { p_user: resetting.id, p_password: password });
     setBusy(false);
     if (error) { setErr(error.message); return; }
-    setCreated({ full_name: resetting.full_name, email: resetting.email, password, role: resetting.role, staff_code: resetting.staff_code, student_code: studentCode[resetting.id], reset: true, phone: resetting.phone });
+    setCreated({ full_name: resetting.full_name, username: resetting.username, email: resetting.email, password, role: resetting.role, staff_code: resetting.staff_code, student_code: studentCode[resetting.id], reset: true, phone: resetting.phone });
     setResetting(null);
   }
 
   const rows = (list.data || []).filter((p) =>
     (!role || p.role === role) &&
-    (!q || `${p.full_name} ${p.email} ${p.phone} ${p.staff_code || ''} ${studentCode[p.id] || ''}`.toLowerCase().includes(q.toLowerCase()))
+    (!q || `${p.full_name} ${p.email} ${p.phone} ${p.username || ''} ${p.staff_code || ''} ${studentCode[p.id] || ''}`.toLowerCase().includes(q.toLowerCase()))
   );
 
   return (
@@ -173,7 +195,7 @@ export default function Users({ me }) {
                 const wa = whatsappLink(p.phone, `Assalamu Alaikum ${p.full_name || ''},`);
                 return (
                   <tr key={p.id}>
-                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}<div className="small muted">{roleLabel(p)}</div></td>
+                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}<div className="small muted">{roleLabel(p)}{p.username ? ` · @${p.username}` : ''}</div></td>
                     <td className="nowrap"><b>{p.staff_code || studentCode[p.id] || <span className="muted">—</span>}</b></td>
                     <td className="small">{realEmail(p.email) || <span className="muted">no email</span>}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
                     <td className="small nowrap">{formatDate(p.created_at)}</td>
@@ -194,7 +216,7 @@ export default function Users({ me }) {
                         <button className="btn small ghost" onClick={() => { setErr(''); setAccess({ profile: p, picked: new Set(p.permissions || []) }); }}>Access</button>
                       )}{' '}
                       {(meAdmin || p.role !== 'admin') && (
-                        <button className="btn small ghost" onClick={() => { setErr(''); setResetting(p); }}>Password</button>
+                        <button className="btn small ghost" onClick={() => { setErr(''); setSaved(''); setResetting(p); }}>Login</button>
                       )}
                     </td>
                   </tr>
@@ -229,6 +251,7 @@ export default function Users({ me }) {
             ) : <div />}
             <label>Full name *<input required value={creating.full_name} onChange={(e) => setCreating({ ...creating, full_name: e.target.value })} /></label>
             <label>Mobile / WhatsApp<input inputMode="tel" placeholder="05xxxxxxxx" value={creating.phone} onChange={(e) => setCreating({ ...creating, phone: e.target.value })} /></label>
+            <label>Username (optional)<input autoCapitalize="none" placeholder="e.g. their phone number" value={creating.username || ''} onChange={(e) => setCreating({ ...creating, username: e.target.value })} /></label>
             <label>Email (optional)<input type="email" placeholder="leave empty to sign in with ID / phone" value={creating.email} onChange={(e) => setCreating({ ...creating, email: e.target.value })} /></label>
             <label>Starting password *
               <div className="input-row">
@@ -243,9 +266,22 @@ export default function Users({ me }) {
       )}
 
       {resetting && (
-        <Modal title={`Password for ${resetting.full_name || resetting.email}`} onClose={() => setResetting(null)}>
+        <Modal title={`Login for ${resetting.full_name || resetting.email}`} onClose={() => setResetting(null)}>
+          <form className="form-grid" onSubmit={saveUsernameFor} key={resetting.username || 'nouser'}>
+            <label>Username (can be their phone number)
+              <input name="username" defaultValue={resetting.username || ''} autoCapitalize="none" placeholder={resetting.phone || 'e.g. 0551234567'} />
+            </label>
+            <div className="actions" style={{ alignSelf: 'end', marginBottom: 12 }}>
+              <button className="btn ghost">Save username</button>
+              {resetting.phone && !resetting.username && (
+                <button type="button" className="btn ghost small" onClick={(ev) => { const f = ev.currentTarget.form; f.username.value = resetting.phone.replace(/\s+/g, ''); }}>Use phone</button>
+              )}
+            </div>
+            {saved && <p className="success span2">{saved}</p>}
+          </form>
+          <hr className="sep" />
           <form className="form-grid" onSubmit={resetPassword}>
-            <p className="span2 small muted">Signs in with: <b>{[resetting.staff_code || studentCode[resetting.id], resetting.phone, realEmail(resetting.email)].filter(Boolean).join(' / ')}</b>. Set a new password and share it with them. No email is sent.</p>
+            <p className="span2 small muted">Signs in with: <b>{[resetting.username, resetting.staff_code || studentCode[resetting.id], resetting.phone, realEmail(resetting.email)].filter(Boolean).join(' / ')}</b>. Set a new password and share it with them. No email is sent.</p>
             <label className="span2">New password *<input name="password" required minLength={6} defaultValue={makePassword()} /></label>
             {err && <p className="error span2">{err}</p>}
             <div className="span2 actions">
@@ -286,6 +322,7 @@ export default function Users({ me }) {
         <Modal title={created.reset ? 'Password changed' : 'Login created'} onClose={() => setCreated(null)}>
           <dl className="details">
             <dt>Name</dt><dd>{created.full_name}</dd>
+            {created.username && <><dt>Username</dt><dd><b>{created.username}</b></dd></>}
             {(created.staff_code || created.student_code) && <><dt>User ID</dt><dd><b>{created.staff_code || created.student_code}</b></dd></>}
             <dt>Website</dt><dd>{window.location.origin}</dd>
             {created.phone && <><dt>Phone</dt><dd>{created.phone}</dd></>}

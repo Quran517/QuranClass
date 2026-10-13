@@ -90,8 +90,8 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.user?.id]);
 
-  async function loadProfile() {
-    setLoading(true);
+  async function loadProfile(quiet = false) {
+    if (!quiet) setLoading(true);
     setProfileError('');
     const { data, error } = await supabase
       .from('profiles')
@@ -159,7 +159,7 @@ export default function App() {
     attendance: <Attendance profile={profile} />,
     reports: <Reports profile={profile} />,
     myclasses: <MyClasses profile={profile} go={setTab} />,
-    account: <Account profile={profile} onSaved={loadProfile} />,
+    account: <Account profile={profile} onSaved={() => loadProfile(true)} />,
     idcards: <IdCards profile={profile} />,
     activity: <Activity />,
     settings: <Settings />,
