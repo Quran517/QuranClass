@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import defaultLogo from './logo.png';
+
+export { defaultLogo };
 
 export const DEFAULT_SETTINGS = {
   school_name: 'SLIS-Jeddah Quran Class',
@@ -13,6 +16,7 @@ export const DEFAULT_SETTINGS = {
   low_attendance_pct: 75,
   backup_every_days: 7,
   allow_signup: true,
+  logo_url: null,
   last_backup_at: null,
 };
 
@@ -24,7 +28,7 @@ export function getSettings() {
 }
 
 function publish(next) {
-  current = { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(next || {}).filter(([, v]) => v !== null && v !== '')), last_backup_at: next?.last_backup_at ?? null };
+  current = { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(next || {}).filter(([, v]) => v !== null && v !== '')), last_backup_at: next?.last_backup_at ?? null, logo_url: next?.logo_url ?? null };
   listeners.forEach((fn) => fn(current));
 }
 
@@ -46,6 +50,25 @@ export async function saveSettings(values) {
 
 export function setLastBackup(at) {
   publish({ ...current, last_backup_at: at });
+}
+
+// The logo to show: an uploaded one (Settings → Logo) or the built-in QTC logo.
+export const logoOf = (s) => (s && s.logo_url) || defaultLogo;
+export const getLogo = () => logoOf(current);
+
+function setFavicon(url) {
+  try {
+    for (const rel of ['icon', 'apple-touch-icon']) {
+      let l = document.querySelector(`link[rel="${rel}"]`);
+      if (!l) { l = document.createElement('link'); l.rel = rel; document.head.appendChild(l); }
+      l.href = url;
+    }
+  } catch { /* ignore */ }
+}
+listeners.add((s) => setFavicon(logoOf(s)));
+
+export function useLogo() {
+  return logoOf(useSettings());
 }
 
 export function useSettings() {

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchAllRows } from './data.js';
-import { useSettings, saveSettings, setLastBackup } from './settings.js';
+import { useSettings, saveSettings, setLastBackup, logoOf } from './settings.js';
 import { formatDate } from './util.js';
 import { downloadExcel } from './exports.js';
 
@@ -37,6 +37,78 @@ export async function collectBackup() {
     fetchAllRows(() => supabase.from('profiles').select('id, email, full_name, phone, role, staff_code, created_at').order('created_at')),
   ]);
   return { app: 'SLIS-Jeddah Quran Class', version: 3, created_at: new Date().toISOString(), settings, classes, students, attendance, profiles };
+}
+
+// Shrink an uploaded picture to a small square PNG so it loads fast everywhere.
+function fileToLogo(file) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => {
+      const size = 256;
+      const c = document.createElement('canvas');
+      c.width = c.height = size;
+      const ctx = c.getContext('2d');
+      const r = Math.min(size / img.width, size / img.height);
+      ctx.drawImage(img, (size - img.width * r) / 2, (size - img.height * r) / 2, img.width * r, img.height * r);
+      URL.revokeObjectURL(img.src);
+      resolve(c.toDataURL('image/png'));
+    };
+    img.onerror = () => reject(new Error('This file is not a picture the browser can open. Use PNG or JPG.'));
+    img.src = URL.createObjectURL(file);
+  });
+}
+
+function LogoSettings() {
+  const s = useSettings();
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function upload(e) {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setMsg(''); setErr(''); setBusy(true);
+    try {
+      const url = await fileToLogo(file);
+      await saveSettings({ logo_url: url });
+      setMsg('New logo saved. It now shows everywhere.');
+    } catch (e2) {
+      setErr(/logo_url/.test(e2.message) ? 'Logo upload is not installed yet. Run update-9.sql in Supabase → SQL Editor.' : e2.message);
+    }
+    setBusy(false);
+  }
+
+  async function reset() {
+    setMsg(''); setErr(''); setBusy(true);
+    try {
+      await saveSettings({ logo_url: null });
+      setMsg('Back to the QTC logo.');
+    } catch (e2) {
+      setErr(e2.message);
+    }
+    setBusy(false);
+  }
+
+  return (
+    <section className="card">
+      <h2>Logo</h2>
+      <p className="small muted">Shown on the sign-in page, the top bar, ID cards, PDF reports and as the browser / phone icon. A square picture works best (PNG or JPG).</p>
+      <div className="logo-row">
+        <img className="logo-preview" src={logoOf(s)} alt="Current logo" />
+        <div className="actions">
+          <label className="file-btn btn">
+            {busy ? 'Saving…' : 'Upload new logo'}
+            <input type="file" accept="image/png,image/jpeg,image/webp,image/svg+xml" onChange={upload} hidden disabled={busy} />
+          </label>
+          {s.logo_url && <button className="btn ghost" onClick={reset} disabled={busy}>Use the QTC logo</button>}
+        </div>
+      </div>
+      {!s.logo_url && <p className="small muted">Using the built-in QTC logo.</p>}
+      {err && <p className="error">{err}</p>}
+      {msg && <p className="success">{msg}</p>}
+    </section>
+  );
 }
 
 export default function Settings() {
@@ -163,6 +235,8 @@ export default function Settings() {
           <div className="span2"><button className="btn" disabled={busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save settings'}</button></div>
         </form>
       </section>
+
+      <LogoSettings />
 
       <section className="card">
         <h2>Backups</h2>
