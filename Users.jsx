@@ -73,7 +73,7 @@ export default function Users({ me }) {
       setErr('The Admin assistant type is not installed yet. Run update-10.sql in Supabase → SQL Editor.');
       return;
     }
-    if (error) setErr(error.message);
+    if (error) setErr(/last admin/.test(error.message) ? 'This is the last admin — make someone else admin first.' : error.message);
     else { setSaved(`${p.full_name || p.email} is now ${choice === 'assistant' ? 'an Admin assistant' : newRole}.`); list.reload(); }
   }
 
@@ -131,17 +131,32 @@ export default function Users({ me }) {
     list.reload(); freeStudents.reload();
   }
 
-  async function saveUsernameFor(e) {
+  async function saveDetails(e) {
     e.preventDefault();
     setErr(''); setSaved('');
-    const u = cleanUsername(new FormData(e.target).get('username'));
+    const f = new FormData(e.target);
+    const u = cleanUsername(f.get('username'));
     if (u && !USERNAME_RULE.test(u)) { setErr('Username can only use letters, numbers and . _ + - (3 to 40 characters, no spaces).'); return; }
+    const values = {
+      p_user: resetting.id,
+      p_full_name: (f.get('full_name') || '').trim(),
+      p_phone: (f.get('phone') || '').trim(),
+      p_email: (f.get('email') || '').trim(),
+      p_username: u,
+      p_staff_code: (f.get('staff_code') || '').trim(),
+    };
     setBusy(true);
-    const { error } = await supabase.from('profiles').update({ username: u || null }).eq('id', resetting.id);
+    let { error } = await supabase.rpc('admin_update_user', values);
+    let note = '';
+    if (error && /admin_update_user/.test(error.message)) {
+      // update-13 not installed yet: save what we can directly
+      ({ error } = await supabase.from('profiles').update({ full_name: values.p_full_name, phone: values.p_phone || null, username: u || null }).eq('id', resetting.id));
+      note = ' (Name, phone and username only — run update-13.sql in Supabase to also change email and ID.)';
+    }
     setBusy(false);
     if (error) { setErr(usernameError(error)); return; }
-    setSaved(u ? `${resetting.full_name || 'User'} can now sign in with username "${u}".` : 'Username removed.');
-    setResetting({ ...resetting, username: u || null });
+    setSaved('Details saved.' + note);
+    setResetting({ ...resetting, full_name: values.p_full_name || resetting.full_name, phone: values.p_phone, email: values.p_email || resetting.email, username: u || null, staff_code: values.p_staff_code.toUpperCase() || resetting.staff_code });
     list.reload();
   }
 
@@ -216,7 +231,7 @@ export default function Users({ me }) {
                         <button className="btn small ghost" onClick={() => { setErr(''); setAccess({ profile: p, picked: new Set(p.permissions || []) }); }}>Access</button>
                       )}{' '}
                       {(meAdmin || p.role !== 'admin') && (
-                        <button className="btn small ghost" onClick={() => { setErr(''); setSaved(''); setResetting(p); }}>Login</button>
+                        <button className="btn small ghost" onClick={() => { setErr(''); setSaved(''); setResetting(p); }}>Edit</button>
                       )}
                     </td>
                   </tr>
@@ -266,26 +281,40 @@ export default function Users({ me }) {
       )}
 
       {resetting && (
-        <Modal title={`Login for ${resetting.full_name || resetting.email}`} onClose={() => setResetting(null)}>
-          <form className="form-grid" onSubmit={saveUsernameFor} key={resetting.username || 'nouser'}>
+        <Modal title={`Edit ${resetting.full_name || 'user'}`} onClose={() => setResetting(null)}>
+          <form className="form-grid" onSubmit={saveDetails} key={resetting.id + (resetting.username || '') + (resetting.staff_code || '')}>
+            <label>Full name *<input name="full_name" required defaultValue={resetting.full_name || ''} /></label>
+            <label>Mobile / WhatsApp<input name="phone" inputMode="tel" defaultValue={resetting.phone || ''} placeholder="05xxxxxxxx" /></label>
             <label>Username (can be their phone number)
-              <input name="username" defaultValue={resetting.username || ''} autoCapitalize="none" placeholder={resetting.phone || 'e.g. 0551234567'} />
+              <div className="input-row">
+                <input name="username" defaultValue={resetting.username || ''} autoCapitalize="none" placeholder="e.g. 0551234567" />
+                <button type="button" className="btn ghost small" onClick={(ev) => { const fm = ev.currentTarget.form; fm.username.value = (fm.phone.value || '').replace(/\s+/g, ''); }}>Use phone</button>
+              </div>
             </label>
-            <div className="actions" style={{ alignSelf: 'end', marginBottom: 12 }}>
-              <button className="btn ghost">Save username</button>
-              {resetting.phone && !resetting.username && (
-                <button type="button" className="btn ghost small" onClick={(ev) => { const f = ev.currentTarget.form; f.username.value = resetting.phone.replace(/\s+/g, ''); }}>Use phone</button>
-              )}
-            </div>
+            <label>Email (optional)<input name="email" type="email" defaultValue={realEmail(resetting.email)} placeholder="leave empty for ID / phone sign-in" /></label>
+            {(resetting.role === 'teacher' || resetting.role === 'admin') && (
+              <label>Staff ID<input name="staff_code" defaultValue={resetting.staff_code || ''} placeholder="TC1001" style={{ textTransform: 'uppercase' }} /></label>
+            )}
+            <label>User type
+              <select value={resetting.role === 'teacher' && resetting.staff_title === 'assistant' ? 'assistant' : resetting.role}
+                disabled={!meAdmin && (resetting.role === 'admin' || resetting.id === me.id)}
+                onChange={async (e) => { await changeRole(resetting, e.target.value); setResetting(null); }}>
+                <option value="student">Student / parent</option>
+                <option value="teacher">Teacher</option>
+                {(meAdmin || resetting.staff_title === 'assistant') && <option value="assistant">Admin assistant</option>}
+                {(meAdmin || resetting.role === 'admin') && <option value="admin">Admin</option>}
+              </select>
+            </label>
             {saved && <p className="success span2">{saved}</p>}
+            <div className="span2"><button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Save details'}</button></div>
           </form>
           <hr className="sep" />
           <form className="form-grid" onSubmit={resetPassword}>
-            <p className="span2 small muted">Signs in with: <b>{[resetting.username, resetting.staff_code || studentCode[resetting.id], resetting.phone, realEmail(resetting.email)].filter(Boolean).join(' / ')}</b>. Set a new password and share it with them. No email is sent.</p>
+            <p className="span2 small muted">Signs in with: <b>{[resetting.username, resetting.staff_code || studentCode[resetting.id], resetting.phone, realEmail(resetting.email)].filter(Boolean).join(' / ')}</b>. To reset their password, type a new one and share it with them. No email is sent.</p>
             <label className="span2">New password *<input name="password" required minLength={6} defaultValue={makePassword()} /></label>
             {err && <p className="error span2">{err}</p>}
             <div className="span2 actions">
-              <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Set password'}</button>
+              <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Set new password'}</button>
               {resetting.id !== me.id && <button type="button" className="btn danger ghost" onClick={() => removeLogin(resetting)}>Delete this login</button>}
             </div>
           </form>
