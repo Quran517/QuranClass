@@ -4,6 +4,16 @@ import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
 import { useSettings } from './settings.js';
 import { QR_PREFIX } from './StudentQR.jsx';
+import { code128Bars } from './barcode.js';
+
+function Barcode({ value }) {
+  const { bars, width } = code128Bars(value);
+  return (
+    <svg className="idcard-barcode" viewBox={`0 0 ${width} 40`} preserveAspectRatio="none" role="img" aria-label={`Barcode ${value}`}>
+      {bars.map(([x, w], i) => <rect key={i} x={x} y="0" width={w} height="40" fill="#000" />)}
+    </svg>
+  );
+}
 
 const initials = (name) => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
 
@@ -56,6 +66,12 @@ export function IdCard({ person, qrSrc, settings, back }) {
         </div>
         {qrSrc && <img className="idcard-qr" src={qrSrc} alt="" />}
       </div>
+      {person.barcode && (
+        <div className="idcard-foot">
+          <Barcode value={person.barcode} />
+          <div className="idcard-barcode-text">{person.barcode}</div>
+        </div>
+      )}
     </div>
   );
 }
@@ -128,12 +144,13 @@ export function studentToCard(s, klass) {
   return {
     id: s.id, kind: 'student', name: s.full_name, code: s.student_code,
     lines: [
-      s.admission_no ? `Adm. No: ${s.admission_no}` : '',
+      `Adm. No: ${s.admission_no || '—'}`,
       c.name ? `Class: ${c.name}` : '',
       c.group_name ? `Group: ${c.group_name}` : '',
       s.quran_level ? `Level: ${s.quran_level}` : '',
     ],
-    summary: [c.name, c.group_name].filter(Boolean).join(' · '),
+    summary: [s.admission_no && `Adm ${s.admission_no}`, c.name, c.group_name].filter(Boolean).join(' · '),
+    barcode: s.student_code,
     guardian: [s.guardian_name, s.guardian_phone].filter(Boolean).join(' · '),
     qr: QR_PREFIX + s.qr_token,
   };
@@ -168,6 +185,7 @@ export default function IdCards({ profile }) {
       id: p.id, kind: 'teacher', name: p.full_name || p.email, code: p.staff_code || '—',
       lines: [p.role === 'admin' ? 'Administrator' : 'Teacher', teachesWhat(p.id)],
       summary: p.role === 'admin' ? 'Administrator' : 'Teacher',
+      barcode: p.staff_code || '',
       qr: `QCSLISJ-STAFF:${p.staff_code || p.id}`,
     }));
   }, [kind, classId, students.data, staff.data, classes.data]); // eslint-disable-line react-hooks/exhaustive-deps
