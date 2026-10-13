@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
-import { useQuery, fetchClasses } from './data.js';
-import { formatDate, whatsappLink } from './util.js';
+import { useQuery, fetchClasses, fetchGroups } from './data.js';
+import { formatDate, whatsappLink, ageOf, groupFor, classCounts } from './util.js';
 import { getSettings } from './settings.js';
 import StudentForm from './StudentForm.jsx';
 import Modal from './Modal.jsx';
@@ -27,6 +27,10 @@ function rejectionMessage(s) {
 export default function Admissions() {
   const [filter, setFilter] = useState('pending');
   const classes = useQuery(fetchClasses);
+  const groups = useQuery(fetchGroups);
+  const enrolled = useQuery(() => supabase.from('students').select('class_id, status').eq('status', 'approved'));
+  const counts = classCounts(enrolled.data);
+  const hasGroups = (groups.data || []).length > 0;
   const list = useQuery(
     () => supabase.from('students').select('*').eq('status', filter).order('created_at', { ascending: filter === 'pending' }),
     [filter]
@@ -39,12 +43,24 @@ export default function Admissions() {
 
   async function decide(s, status) {
     setErr('');
-    const class_id = status === 'approved' ? choice[s.id] || s.class_id || null : s.class_id;
-    if (status === 'approved' && !class_id && !window.confirm('No class selected. Approve without a class?')) return;
-    const { error } = await supabase.from('students').update({ status, class_id }).eq('id', s.id);
-    if (error) { setErr(error.message); return; }
-    const klass = (classes.data || []).find((c) => c.id === class_id);
-    setDone({ ...done, [s.id]: { status, link: whatsappLink(s.whatsapp || s.guardian_phone, status === 'approved' ? approvalMessage({ ...s }, klass) : rejectionMessage(s)) } });
+    const pick = choice[s.id] ?? (hasGroups ? 'auto' : '');
+    let class_id = status === 'approved' ? (pick === 'auto' ? null : pick || s.class_id || null) : s.class_id;
+    let klass = null, placedNote = '';
+    if (status === 'approved' && pick === 'auto') {
+      const { data, error } = await supabase.rpc('place_student', { p_student: s.id, p_approve: true });
+      if (error) { setErr(`${s.full_name}: ${error.message}. Choose a class by hand, or fix the date of birth / gender with Edit.`); return; }
+      class_id = data.class_id;
+      klass = { id: data.class_id, name: data.class_name, group_name: data.group_name };
+      placedNote = `${data.class_name}${data.created ? ' (new class created)' : ''}`;
+      classes.reload();
+    } else {
+      if (status === 'approved' && !class_id && !window.confirm('No class selected. Approve without a class?')) return;
+      const { error } = await supabase.from('students').update({ status, class_id }).eq('id', s.id);
+      if (error) { setErr(error.message); return; }
+      klass = (classes.data || []).find((c) => c.id === class_id);
+    }
+    enrolled.reload();
+    setDone({ ...done, [s.id]: { status, placedNote, link: whatsappLink(s.whatsapp || s.guardian_phone, status === 'approved' ? approvalMessage({ ...s }, klass) : rejectionMessage(s)) } });
   }
 
   async function saveEdit(values) {
@@ -86,7 +102,7 @@ export default function Admissions() {
                     <b>{s.full_name}</b> <span className="muted small">{s.student_code}{s.admission_no ? ` · Adm ${s.admission_no}` : ''}</span>
                     <div className="small muted">
                       {s.gender && <span className="cap">{s.gender}</span>}
-                      {s.date_of_birth && <> · born {formatDate(s.date_of_birth)}</>}
+                      {s.date_of_birth && <> · born {formatDate(s.date_of_birth)} (age {ageOf(s.date_of_birth)})</>}
                       {s.school_grade && <> · {s.school_grade}</>}
                       {s.quran_level && <> · Quran: {s.quran_level}</>}
                     </div>
@@ -100,15 +116,23 @@ export default function Admissions() {
                 {d ? (
                   <div className="decision">
                     <span className={`badge ${d.status}`}>{d.status}</span>
+                    {d.placedNote && <span className="small">→ <b>{d.placedNote}</b></span>}
                     {d.link
                       ? <a className="btn whatsapp" href={d.link} target="_blank" rel="noreferrer">Send WhatsApp {d.status === 'approved' ? 'confirmation' : 'message'}</a>
                       : <span className="small muted">No phone number to message.</span>}
                   </div>
                 ) : filter === 'pending' ? (
                   <div className="decision">
-                    <select value={choice[s.id] || ''} onChange={(e) => setChoice({ ...choice, [s.id]: e.target.value })}>
-                      <option value="">Assign class…</option>
-                      {(classes.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                    <select value={choice[s.id] ?? (hasGroups ? 'auto' : '')} onChange={(e) => setChoice({ ...choice, [s.id]: e.target.value })}>
+                      {hasGroups && (() => {
+                        const g = groupFor(s, groups.data);
+                        return <option value="auto">⚡ Automatic{g ? ` → ${g.name} (${g.label})` : ' (no matching group)'}</option>;
+                      })()}
+                      <option value="">{hasGroups ? 'No class yet' : 'Assign class…'}</option>
+                      {(classes.data || []).map((c) => {
+                        const n = counts[c.id] || 0, full = hasGroups && n >= (c.capacity || 12);
+                        return <option key={c.id} value={c.id} disabled={full}>{c.name}{hasGroups ? ` (${n}/${c.capacity || 12}${full ? ' full' : ''})` : ''}</option>;
+                      })}
                     </select>
                     <button className="btn" onClick={() => decide(s, 'approved')}>Approve</button>
                     <button className="btn danger ghost" onClick={() => decide(s, 'rejected')}>Reject</button>

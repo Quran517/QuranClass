@@ -99,3 +99,39 @@ export function usernameError(e) {
   if (/username/.test(m) && /column/.test(m)) return 'Usernames are not installed yet. Run update-12.sql in Supabase → SQL Editor.';
   return m;
 }
+
+// ---- Groups & class limits ----
+// Age in whole years today.
+export function ageOf(dob) {
+  if (!dob) return null;
+  const b = new Date(dob + 'T00:00:00'), n = new Date();
+  let a = n.getFullYear() - b.getFullYear();
+  if (n.getMonth() < b.getMonth() || (n.getMonth() === b.getMonth() && n.getDate() < b.getDate())) a -= 1;
+  return a;
+}
+
+// The group a student belongs to (same rule as the database), or null.
+export function groupFor(student, groups) {
+  const a = ageOf(student?.date_of_birth);
+  if (a == null) return null;
+  return (groups || []).slice().sort((x, y) => x.sort - y.sort || x.name.localeCompare(y.name))
+    .find((g) => a >= g.min_age && a <= g.max_age && (g.gender === 'any' || g.gender === student.gender)) || null;
+}
+
+// "Group 2 – Class A · Ages 8–12 · Boys" (no repeated "Group 2").
+export function classTag(c) {
+  if (!c) return '';
+  const name = c.name || '';
+  let parts = (c.group_name || '').split(' · ').filter(Boolean);
+  if (parts.length > 1 && name.toLowerCase().startsWith(parts[0].toLowerCase())) parts = parts.slice(1);
+  return [name, ...parts].filter(Boolean).join(' · ');
+}
+
+// Number of enrolled students per class id.
+export function classCounts(students) {
+  const n = {};
+  for (const s of students || []) if (s.class_id && (!s.status || s.status === 'approved')) n[s.class_id] = (n[s.class_id] || 0) + 1;
+  return n;
+}
+
+export const GENDER_LABEL = { any: 'Boys & Girls', male: 'Boys', female: 'Girls' };

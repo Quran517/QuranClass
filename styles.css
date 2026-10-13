@@ -353,3 +353,13 @@ tr.warn td { background: var(--amber-bg); }
 fieldset.class-days { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 8px 12px 12px; display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; }
 fieldset.class-days legend { font-weight: 600; padding: 0 4px; }
 label.check.inline { align-items: center; gap: 6px; }
+
+/* groups & class limits */
+.group-block { margin-top: 18px; }
+.group-block + .group-block { border-top: 1px solid var(--line); padding-top: 14px; }
+.group-head { margin-bottom: 8px; align-items: flex-start; gap: 8px; flex-wrap: wrap; }
+.group-head h3 { margin: 0; color: var(--navy); }
+.cap-badge { font-size: .78rem; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: #e6f4ea; color: #1e7a3c; white-space: nowrap; }
+.cap-badge.full { background: #fde8e8; color: #b42318; }
+.class-card .meter { background: var(--line); width: 100%; }
+.class-card.full .meter span { background: #d92d20; }

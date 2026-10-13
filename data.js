@@ -23,6 +23,11 @@ export function useQuery(fn, deps = []) {
 export const fetchClasses = () =>
   supabase.from('classes').select('*').order('name');
 
+// Age & gender groups (update-16). Empty list if not installed yet.
+export const fetchGroups = () =>
+  supabase.from('class_groups').select('*').order('sort').order('name')
+    .then((r) => (r.error && /class_groups/.test(r.error.message) ? { data: [], error: null, missing: true } : r));
+
 export const fetchTeachers = () =>
   supabase.from('profiles').select('id, full_name, email, phone, role, staff_code').in('role', ['teacher', 'admin']).order('full_name');
 

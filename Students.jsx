@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
-import { useQuery, fetchClasses } from './data.js';
-import { formatDate, whatsappLink } from './util.js';
+import { useQuery, fetchClasses, fetchGroups } from './data.js';
+import { formatDate, whatsappLink, groupFor, classCounts } from './util.js';
 import { downloadExcel } from './exports.js';
 import StudentForm from './StudentForm.jsx';
 import StudentQR from './StudentQR.jsx';
@@ -10,6 +10,7 @@ import ImportStudents from './ImportStudents.jsx';
 
 export default function Students() {
   const classes = useQuery(fetchClasses);
+  const groups = useQuery(fetchGroups);
   const list = useQuery(() => supabase.from('students').select('*').neq('status', 'pending').order('full_name'));
   const [q, setQ] = useState('');
   const [cls, setCls] = useState('');
@@ -30,13 +31,18 @@ export default function Students() {
 
   async function save(values, extra) {
     setBusy(true); setErr('');
-    const payload = { ...values, class_id: extra.class_id || null, status: extra.status };
-    const { error } = editing.id
-      ? await supabase.from('students').update(payload).eq('id', editing.id)
-      : await supabase.from('students').insert(payload);
+    const auto = extra.class_id === 'auto';
+    const payload = { ...values, class_id: auto ? (editing.class_id || null) : extra.class_id || null, status: extra.status };
+    const { data: row, error } = editing.id
+      ? await supabase.from('students').update(payload).eq('id', editing.id).select('id').single()
+      : await supabase.from('students').insert(payload).select('id').single();
+    if (!error && auto && extra.status === 'approved') {
+      const { error: e2 } = await supabase.rpc('place_student', { p_student: row.id, p_approve: false });
+      if (e2) { setBusy(false); setErr(`Saved, but not placed in a class: ${e2.message}.`); list.reload(); classes.reload(); return; }
+    }
     setBusy(false);
     if (error) setErr(error.message);
-    else { setEditing(null); list.reload(); }
+    else { setEditing(null); list.reload(); classes.reload(); }
   }
 
   async function remove(s) {
@@ -125,6 +131,8 @@ export default function Students() {
           <AdminStudentForm
             student={editing}
             classes={classes.data || []}
+            groups={groups.data || []}
+            counts={classCounts(list.data)}
             busy={busy}
             onSave={save}
             onDelete={editing.id ? () => remove(editing) : null}
@@ -156,8 +164,9 @@ export default function Students() {
   );
 }
 
-function AdminStudentForm({ student, classes, busy, onSave, onDelete }) {
-  const [classId, setClassId] = useState(student.class_id || '');
+function AdminStudentForm({ student, classes, groups = [], counts = {}, busy, onSave, onDelete }) {
+  const [classId, setClassId] = useState(student.class_id || (groups.length ? 'auto' : ''));
+  const g = groupFor(student, groups);
   const [status, setStatus] = useState(student.status || 'approved');
 
   return (
@@ -172,8 +181,12 @@ function AdminStudentForm({ student, classes, busy, onSave, onDelete }) {
           <>
             <label>Class
               <select value={classId} onChange={(e) => setClassId(e.target.value)}>
+                {groups.length > 0 && <option value="auto">⚡ Automatic — by age &amp; gender{g ? ` (${g.name})` : ''}</option>}
                 <option value="">No class</option>
-                {classes.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                {classes.map((c) => {
+                  const n = counts[c.id] || 0, cap = c.capacity || 12, full = groups.length > 0 && n >= cap && c.id !== student.class_id;
+                  return <option key={c.id} value={c.id} disabled={full}>{c.name}{groups.length ? ` (${n}/${cap}${full ? ' full' : ''})` : ''}</option>;
+                })}
               </select>
             </label>
             <label>Status

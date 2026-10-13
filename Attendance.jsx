@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
-import { today, formatDate, whatsappLink, STATUS_LABELS, lastClassDay, isClassDay, classDaysLabel } from './util.js';
+import { today, formatDate, whatsappLink, STATUS_LABELS, classTag, lastClassDay, isClassDay, classDaysLabel } from './util.js';
 import { getSettings, useSettings } from './settings.js';
 import QrScanner from './QrScanner.jsx';
 import { QR_PREFIX } from './StudentQR.jsx';
@@ -150,7 +150,7 @@ export default function Attendance({ profile }) {
     if (data.added_to_class || auto) await load();
     setMarks((m) => ({ ...m, [data.student_id]: 'present' }));
     setSaved((m) => ({ ...m, [data.student_id]: 'present' }));
-    const where = data.class_name ? ` · ${data.class_name}${data.group_name ? ' · ' + data.group_name : ''}` : '';
+    const where = data.class_name ? ` · ${classTag({ name: data.class_name, group_name: data.group_name })}` : '';
     signal(already ? 'repeat' : 'ok',
       (already ? `${data.full_name} — already marked present`
         : `${data.full_name} — present${data.added_to_class ? ' (added to this class)' : ''}`) + where);
@@ -186,7 +186,7 @@ export default function Attendance({ profile }) {
         <div className="filters">
           <select value={classId} onChange={(e) => { setClassId(e.target.value); setScanning(false); }} aria-label="Class">
             <option value={AUTO}>🔍 Automatic — any class (scan cards)</option>
-            {classes.data.map((c) => <option key={c.id} value={c.id}>{c.name}{c.group_name ? ` · ${c.group_name}` : ''}</option>)}
+            {classes.data.map((c) => <option key={c.id} value={c.id}>{classTag(c)}</option>)}
           </select>
           <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
           <button className={sound ? 'btn ghost' : 'btn ghost muted-btn'} onClick={toggleSound} aria-pressed={sound} title="Beep when a code is scanned">
@@ -247,7 +247,7 @@ export default function Attendance({ profile }) {
                 return (
                   <div key={c.id} className="auto-class">
                     <div className="row-between">
-                      <div><b>{c.name}</b>{c.group_name && <span className="small muted"> · {c.group_name}</span>}</div>
+                      <div><b>{c.name}</b>{c.group_name && <span className="small muted"> · {classTag(c).slice(c.name.length + 3)}</span>}</div>
                       <span className="badge present">{came.length} present</span>
                     </div>
                     {came.length > 0 && (

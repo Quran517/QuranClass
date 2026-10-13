@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
+import { classTag } from './util.js';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
 import { useSettings, logoOf } from './settings.js';
@@ -62,6 +63,7 @@ export function IdCard({ person, qrSrc, settings, back }) {
         <div className="idcard-info">
           <div className="idcard-name">{person.name}</div>
           <div className="idcard-id">{person.code}</div>
+          {person.tag && <div className="idcard-tag">{person.tag}</div>}
           {(person.lines || []).filter(Boolean).map((l, i) => <div key={i} className="idcard-line">{l}</div>)}
         </div>
         {qrSrc && <img className="idcard-qr" src={qrSrc} alt="" />}
@@ -143,13 +145,12 @@ export function studentToCard(s, klass) {
   const c = typeof klass === 'string' ? { name: klass } : klass || {};
   return {
     id: s.id, kind: 'student', name: s.full_name, code: s.student_code,
+    tag: classTag(c) || 'No class yet',
     lines: [
       `Adm. No: ${s.admission_no || '—'}`,
-      c.name ? `Class: ${c.name}` : '',
-      c.group_name ? `Group: ${c.group_name}` : '',
       s.quran_level ? `Level: ${s.quran_level}` : '',
     ],
-    summary: [s.admission_no && `Adm ${s.admission_no}`, c.name, c.group_name].filter(Boolean).join(' · '),
+    summary: [s.admission_no && `Adm ${s.admission_no}`, classTag(c)].filter(Boolean).join(' · '),
     barcode: s.student_code,
     guardian: [s.guardian_name, s.guardian_phone].filter(Boolean).join(' · '),
     qr: QR_PREFIX + s.qr_token,
