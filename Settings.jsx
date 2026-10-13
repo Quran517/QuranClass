@@ -127,7 +127,7 @@ export default function Settings() {
       for (const [k] of FIELDS) values[k] = (f[k] ?? '').toString().trim() || null;
       values.low_attendance_pct = Number(f.low_attendance_pct) || 75;
       values.backup_every_days = Number(f.backup_every_days) || 7;
-      values.allow_signup = f.allow_signup !== false;
+      values.allow_signup = false; // logins are made by the admin; new students use the admission form
       const cd = Array.isArray(f.class_days) ? f.class_days : [6];
       if (!cd.length) throw new Error('Tick at least one class day.');
       values.class_days = cd;
@@ -248,10 +248,6 @@ export default function Settings() {
           </label>
           <label>Remind me to back up every (days)
             <input type="number" min="1" max="90" value={f.backup_every_days} onChange={(e) => setF({ ...f, backup_every_days: e.target.value })} />
-          </label>
-          <label className="check span2">
-            <input type="checkbox" checked={f.allow_signup === false} onChange={(e) => setF({ ...f, allow_signup: !e.target.checked })} />
-            <span><b>Only the admin can create users.</b> Hides "Create an account" on the sign-in page and blocks self sign-up. Create logins under <i>Users</i> instead.</span>
           </label>
           <div className="span2"><button className="btn" disabled={busy === 'save'}>{busy === 'save' ? 'Saving…' : 'Save settings'}</button></div>
         </form>

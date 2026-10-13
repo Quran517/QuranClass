@@ -6,6 +6,7 @@ export const AREAS = [
   ['classes', 'Classes', 'Create and edit classes; add or remove students in classes'],
   ['users', 'Users', 'Create teacher/student logins and reset passwords (never admins)'],
   ['attendance', 'Attendance', 'Take attendance for ALL classes (not just their own)'],
+  ['progress', 'Progress', 'Record progress & comments for ALL students'],
   ['reports', 'Reports', 'Reports for ALL classes'],
   ['idcards', 'ID Cards', 'Print ID cards for ALL students and staff'],
   ['staffatt', 'Staff Attendance', 'Mark and report teachers\' attendance'],
@@ -16,7 +17,7 @@ export const AREAS = [
 ];
 
 // Ready-made access for an "Admin assistant": everything except Users and Settings.
-export const ASSISTANT_PERMS = ['dashboard', 'admissions', 'students', 'classes', 'attendance', 'staffatt', 'reports', 'idcards', 'messages', 'team', 'activity'];
+export const ASSISTANT_PERMS = ['dashboard', 'admissions', 'students', 'classes', 'attendance', 'progress', 'staffatt', 'reports', 'idcards', 'messages', 'team', 'activity'];
 
 export const isAdmin = (profile) => profile?.role === 'admin';
 

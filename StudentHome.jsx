@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import StudentForm from './StudentForm.jsx';
 import StudentQR from './StudentQR.jsx';
-import { PrintCards, studentToCard, printCards } from './IdCards.jsx';
+import { PrintCards, studentToCard, printCards, DigitalCard } from './IdCards.jsx';
+import { ProgressList } from './Progress.jsx';
+import { KIND_LABEL, GRADE_LABEL } from './progress.js';
 import { formatDate, STATUS_LABELS } from './util.js';
 
 const STATUS_TEXT = {
@@ -16,6 +18,8 @@ export default function StudentHome({ profile }) {
   const [student, setStudent] = useState(undefined);
   const [klass, setKlass] = useState(null);
   const [records, setRecords] = useState([]);
+  const [progress, setProgress] = useState([]);
+  const [showId, setShowId] = useState(false);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -33,6 +37,9 @@ export default function StudentHome({ profile }) {
         .select('att_date, status, method').eq('student_id', data.id)
         .order('att_date', { ascending: false }).limit(60);
       setRecords(a || []);
+      const { data: pr } = await supabase.from('student_progress').select('*').eq('student_id', data.id)
+        .order('entry_date', { ascending: false }).order('created_at', { ascending: false }).limit(200);
+      setProgress(pr || []);
     }
   }
 
@@ -96,7 +103,25 @@ export default function StudentHome({ profile }) {
           <StudentQR student={student} />
           <h3>My ID card</h3>
           <div className="card-preview"><PrintCards people={[studentToCard(student, klass)]} withBack /></div>
-          <p><button className="btn ghost" onClick={() => printCards('a4')}>Print my ID card</button></p>
+          <p className="actions" style={{ justifyContent: 'center' }}>
+            <button className="btn" onClick={() => setShowId(true)}>📱 Show digital ID</button>
+            <button className="btn ghost" onClick={() => printCards('a4')}>Print my ID card</button>
+          </p>
+          {showId && <DigitalCard person={studentToCard(student, klass)} onClose={() => setShowId(false)} />}
+        </section>
+      )}
+
+      {student.status === 'approved' && (
+        <section className="card">
+          <h2>My progress</h2>
+          {progress.length > 0 && (
+            <div className="stats">
+              <div className="stat"><b className="stat-text">{progress[0].lesson || KIND_LABEL[progress[0].kind]}</b><span>Latest lesson · {formatDate(progress[0].entry_date)}</span></div>
+              <div className="stat"><b>{progress.length}</b><span>Lessons recorded</span></div>
+              {progress[0].grade && <div className="stat"><b className="stat-text">{GRADE_LABEL[progress[0].grade]}</b><span>Latest grade</span></div>}
+            </div>
+          )}
+          <ProgressList entries={progress} />
         </section>
       )}
 

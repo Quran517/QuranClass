@@ -26,7 +26,7 @@ export function pickStudentFields(s) {
 
 // Shared admission / student details form.
 // extra: optional admin-only fields (class, status) rendered at the end.
-export default function StudentForm({ initial, onSubmit, submitLabel = 'Save', busy, extra, requireConsent = true }) {
+export default function StudentForm({ initial, onSubmit, submitLabel = 'Save', busy, extra, requireConsent = true, requireDob = false }) {
   const [f, setF] = useState(() => pickStudentFields(initial));
   const set = (k) => (e) => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
 
@@ -50,7 +50,7 @@ export default function StudentForm({ initial, onSubmit, submitLabel = 'Save', b
           <option value="female">Female</option>
         </select>
       </label>
-      <label>Date of birth<input type="date" value={f.date_of_birth || ''} onChange={set('date_of_birth')} /></label>
+      <label>Date of birth{requireDob ? ' *' : ''}<input type="date" required={requireDob} max={new Date().toLocaleDateString('en-CA')} value={f.date_of_birth || ''} onChange={set('date_of_birth')} /></label>
       <label>School grade<input placeholder="e.g. Grade 5" value={f.school_grade || ''} onChange={set('school_grade')} /></label>
       <label>Current Quran level<input placeholder="e.g. Qaida, Juz 30, Hifz" value={f.quran_level || ''} onChange={set('quran_level')} /></label>
       <label>Parent / guardian name *<input required value={f.guardian_name || ''} onChange={set('guardian_name')} /></label>

@@ -83,6 +83,22 @@ export const PAPER = {
   card: { label: 'ID card printer (CR80, 1 card per page)', css: '@page { size: 85.6mm 54mm; margin: 0; }' },
 };
 
+// Full-screen digital ID for a phone (front / back).
+export function DigitalCard({ person, onClose }) {
+  const settings = useSettings();
+  const imgs = useQrImages([person]);
+  const [back, setBack] = useState(false);
+  return (
+    <div className="digital-id" role="dialog" aria-label="Digital ID card" onClick={onClose}>
+      <div className="digital-card" onClick={(e) => { e.stopPropagation(); setBack(!back); }} title="Tap to turn the card">
+        <IdCard person={person} qrSrc={imgs[person.id]} settings={settings} back={back} />
+      </div>
+      <p className="small" style={{ color: '#fff' }}>Tap the card to see the {back ? 'front' : 'back'} · tap outside to close</p>
+      <button className="btn" onClick={onClose}>Close</button>
+    </div>
+  );
+}
+
 export function printCards(paper = 'a4') {
   let tag = document.getElementById('card-page-size');
   if (!tag) { tag = document.createElement('style'); tag.id = 'card-page-size'; document.head.appendChild(tag); }
@@ -233,6 +249,10 @@ export default function IdCards({ profile }) {
                   onChange={(e) => setPicked(e.target.checked ? null : {})} />
                 All ({shown.length}) — or tick only the cards you need
               </label>
+              <div className="pick-tools small">
+                <button type="button" className="link" onClick={() => setPicked({})}>Select none</button>
+                <span className="muted">{selected.length} of {shown.length} selected</span>
+              </div>
               {shown.map((p) => (
                 <label key={p.id} className="pick-row">
                   <input type="checkbox" checked={!picked || !!picked[p.id]}

@@ -18,18 +18,20 @@ import Settings from './Settings.jsx';
 import Messages from './Messages.jsx';
 import Team from './Team.jsx';
 import StaffAttendance from './StaffAttendance.jsx';
+import Progress from './Progress.jsx';
 import { loadSettings } from './settings.js';
 import { AREAS } from './perms.js';
 
 const TABS = {
   student: [
-    ['home', 'My Admission'],
+    ['home', 'My Page'],
     ['team', 'QTC Team'],
     ['account', 'Account'],
   ],
   teacher: [
     ['myclasses', 'My Classes'],
     ['attendance', 'Attendance'],
+    ['progress', 'Progress'],
     ['reports', 'Reports'],
     ['idcards', 'ID Cards'],
     ['messages', 'Messages'],
@@ -43,6 +45,7 @@ const TABS = {
     ['classes', 'Classes'],
     ['users', 'Users'],
     ['attendance', 'Attendance'],
+    ['progress', 'Progress'],
     ['staffatt', 'Staff Attendance'],
     ['reports', 'Reports'],
     ['idcards', 'ID Cards'],
@@ -166,6 +169,7 @@ export default function App() {
     messages: <Messages profile={profile} />,
     team: <Team profile={profile} />,
     staffatt: <StaffAttendance />,
+    progress: <Progress profile={profile} />,
   };
 
   return (
