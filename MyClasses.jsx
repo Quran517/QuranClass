@@ -3,7 +3,7 @@ import { useQuery, fetchMyClasses } from './data.js';
 import { whatsappLink } from './util.js';
 
 export default function MyClasses({ profile, go }) {
-  const classes = useQuery(() => fetchMyClasses(profile), [profile.id]);
+  const classes = useQuery(() => fetchMyClasses(profile, 'myclasses'), [profile.id]);
   const students = useQuery(() =>
     supabase.from('students').select('id, full_name, student_code, class_id, guardian_name, guardian_phone, whatsapp, quran_level')
       .eq('status', 'approved').order('full_name'), [profile.id]);

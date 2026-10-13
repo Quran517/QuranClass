@@ -1,4 +1,22 @@
-import { getSettings } from './settings.js';
+import { getSettings, getLogo } from './settings.js';
+
+// Load the logo as a PNG data URL for the PDF (works for the built-in or an uploaded logo).
+async function logoData() {
+  try {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.src = getLogo();
+    await img.decode();
+    const c = document.createElement('canvas');
+    c.width = c.height = 160;
+    const ctx = c.getContext('2d');
+    const r = Math.min(160 / img.width, 160 / img.height);
+    ctx.drawImage(img, (160 - img.width * r) / 2, (160 - img.height * r) / 2, img.width * r, img.height * r);
+    return c.toDataURL('image/png');
+  } catch {
+    return null;
+  }
+}
 
 // Excel and PDF downloads. Libraries are loaded only when needed,
 // so the app stays fast on phones.
@@ -30,9 +48,12 @@ export async function downloadPdf(filename, { title, subtitle, tables }) {
   doc.rect(0, 64, doc.internal.pageSize.getWidth(), 4, 'F');
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
-  doc.text(`${getSettings().school_name}${getSettings().academic_year ? ' · ' + getSettings().academic_year : ''}`, 40, 30);
+  const logo = await logoData();
+  const tx = logo ? 92 : 40;
+  if (logo) doc.addImage(logo, 'PNG', 36, 8, 48, 48);
+  doc.text(`${getSettings().school_name}${getSettings().academic_year ? ' · ' + getSettings().academic_year : ''}`, tx, 30);
   doc.setFontSize(11);
-  doc.text(title, 40, 50);
+  doc.text(title, tx, 50);
 
   doc.setTextColor(32, 43, 60);
   doc.setFontSize(10);

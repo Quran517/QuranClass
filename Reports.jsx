@@ -21,7 +21,7 @@ async function fetchAll(build) {
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 
 export default function Reports({ profile }) {
-  const classes = useQuery(() => fetchMyClasses(profile), [profile.id]);
+  const classes = useQuery(() => fetchMyClasses(profile, 'reports'), [profile.id]);
   const [classId, setClassId] = useState('all');
   const [from, setFrom] = useState(daysAgo(30));
   const [to, setTo] = useState(today());
@@ -81,7 +81,7 @@ export default function Reports({ profile }) {
     return Object.values(by).sort((x, y) => y.att_date.localeCompare(x.att_date) || className(x.class_id).localeCompare(className(y.class_id)));
   }, [data]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const label = classId === 'all' ? (profile.role === 'admin' ? 'All classes' : 'My classes') : className(classId);
+  const label = classId === 'all' ? ((profile.role === 'admin' || (profile.permissions || []).includes('reports')) ? 'All classes' : 'My classes') : className(classId);
   const period = `${formatDate(from)} – ${formatDate(to)}`;
   const fileBase = `attendance-${label.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}`;
 
@@ -132,7 +132,7 @@ export default function Reports({ profile }) {
         <h2>Attendance reports</h2>
         <div className="filters">
           <select value={classId} onChange={(e) => setClassId(e.target.value)} aria-label="Class">
-            <option value="all">{profile.role === 'admin' ? 'All classes' : 'All my classes'}</option>
+            <option value="all">{(profile.role === 'admin' || (profile.permissions || []).includes('reports')) ? 'All classes' : 'All my classes'}</option>
             {classes.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
           </select>
           <label className="inline">From <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></label>

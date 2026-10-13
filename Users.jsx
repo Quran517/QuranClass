@@ -4,6 +4,7 @@ import { useQuery } from './data.js';
 import { formatDate, whatsappLink, realEmail } from './util.js';
 import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
+import { AREAS } from './perms.js';
 
 function makePassword() {
   const words = ['Noor', 'Huda', 'Iqra', 'Sabr', 'Ilm', 'Amal', 'Rahma', 'Taqwa'];
@@ -39,6 +40,22 @@ export default function Users({ me }) {
   const [created, setCreated] = useState(null);     // result to show
   const [resetting, setResetting] = useState(null); // profile
   const [busy, setBusy] = useState(false);
+  const [access, setAccess] = useState(null); // { profile, picked: Set }
+  const meAdmin = me.role === 'admin';
+
+  async function saveAccess() {
+    setBusy(true); setErr(''); setSaved('');
+    const permissions = AREAS.map(([k]) => k).filter((k) => access.picked.has(k));
+    const { error } = await supabase.from('profiles').update({ permissions }).eq('id', access.profile.id);
+    setBusy(false);
+    if (error) {
+      setErr(/permissions/.test(error.message) ? 'Access settings are not installed yet. Run update-8.sql in Supabase → SQL Editor.' : error.message);
+      return;
+    }
+    setSaved(`Access updated for ${access.profile.full_name || access.profile.email}.`);
+    setAccess(null);
+    list.reload();
+  }
 
   async function changeRole(p, newRole) {
     setErr(''); setSaved('');
@@ -146,14 +163,23 @@ export default function Users({ me }) {
                     <td className="small">{realEmail(p.email) || <span className="muted">no email</span>}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
                     <td className="small nowrap">{formatDate(p.created_at)}</td>
                     <td>
-                      <select value={p.role} onChange={(e) => changeRole(p, e.target.value)} aria-label={`Role for ${p.full_name || p.email}`}>
+                      <select value={p.role} disabled={!meAdmin && (p.role === 'admin' || p.id === me.id)}
+                        onChange={(e) => changeRole(p, e.target.value)} aria-label={`Role for ${p.full_name || p.email}`}>
                         <option value="student">Student</option>
                         <option value="teacher">Teacher</option>
-                        <option value="admin">Admin</option>
+                        {(meAdmin || p.role === 'admin') && <option value="admin">Admin</option>}
                       </select>
+                      {p.role === 'teacher' && (p.permissions || []).length > 0 && (
+                        <div className="small muted">+ {p.permissions.map((k) => AREAS.find(([a]) => a === k)?.[1] || k).join(', ')}</div>
+                      )}
                     </td>
                     <td className="nowrap">
-                      <button className="btn small ghost" onClick={() => { setErr(''); setResetting(p); }}>Password</button>
+                      {meAdmin && p.role === 'teacher' && (
+                        <button className="btn small ghost" onClick={() => { setErr(''); setAccess({ profile: p, picked: new Set(p.permissions || []) }); }}>Access</button>
+                      )}{' '}
+                      {(meAdmin || p.role !== 'admin') && (
+                        <button className="btn small ghost" onClick={() => { setErr(''); setResetting(p); }}>Password</button>
+                      )}
                     </td>
                   </tr>
                 );
@@ -170,7 +196,7 @@ export default function Users({ me }) {
               <select value={creating.role} onChange={(e) => setCreating({ ...creating, role: e.target.value })}>
                 <option value="teacher">Teacher</option>
                 <option value="student">Student / parent</option>
-                <option value="admin">Admin</option>
+                {meAdmin && <option value="admin">Admin</option>}
               </select>
             </label>
             {creating.role === 'student' ? (
@@ -207,6 +233,32 @@ export default function Users({ me }) {
               {resetting.id !== me.id && <button type="button" className="btn danger ghost" onClick={() => removeLogin(resetting)}>Delete this login</button>}
             </div>
           </form>
+        </Modal>
+      )}
+
+      {access && (
+        <Modal title={`Access for ${access.profile.full_name || access.profile.email}`} onClose={() => setAccess(null)}>
+          <p className="small muted">
+            Every teacher can always use <b>My Classes, Attendance, Reports and ID Cards for their own class</b>.
+            Tick extra areas below to give more access. Only you (the admin) can change this.
+          </p>
+          <div className="access-list">
+            {AREAS.map(([k, label, hint]) => (
+              <label key={k} className="pick-row">
+                <input type="checkbox" checked={access.picked.has(k)} onChange={(e) => {
+                  const next = new Set(access.picked);
+                  if (e.target.checked) next.add(k); else next.delete(k);
+                  setAccess({ ...access, picked: next });
+                }} />
+                <span><b>{label}</b><br /><span className="small muted">{hint}</span></span>
+              </label>
+            ))}
+          </div>
+          {err && <p className="error">{err}</p>}
+          <div className="actions">
+            <button className="btn" disabled={busy} onClick={saveAccess}>{busy ? 'Saving…' : 'Save access'}</button>
+            <button className="btn ghost" onClick={() => setAccess({ ...access, picked: new Set() })}>Untick all (own class only)</button>
+          </div>
         </Modal>
       )}
 

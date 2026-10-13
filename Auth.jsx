@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
-import { useSettings } from './settings.js';
+import { useSettings, logoOf } from './settings.js';
 
 export function Brand() {
   const s = useSettings();
   return (
     <div className="brand-block">
-      <div className="logo" aria-hidden="true">۞</div>
+      <img className="auth-logo" src={logoOf(s)} alt={`${s.school_name} logo`} />
       <h1>{s.school_name}</h1>
       <p>{s.tagline}</p>
       {s.academic_year && <p className="small">Academic Year {s.academic_year}</p>}

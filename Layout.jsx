@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { supabase } from './supabase.js';
-import { useSettings } from './settings.js';
+import { useSettings, logoOf } from './settings.js';
 
 const ROLE_LABEL = { student: 'Student', teacher: 'Teacher', admin: 'Admin' };
 
@@ -13,7 +13,7 @@ export default function Layout({ profile, tabs, current, onTab, children }) {
       <header className="topbar">
         <div className="topbar-inner">
           <div className="brand">
-            <span className="logo small" aria-hidden="true">۞</span>
+            <img className="brand-logo" src={logoOf(settings)} alt="" />
             <div>
               <div className="brand-name">{settings.school_name}</div>
               <div className="brand-sub">{profile.full_name || profile.email} · {ROLE_LABEL[profile.role]}{profile.staff_code ? ` · ${profile.staff_code}` : ''}</div>

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
-import { useSettings } from './settings.js';
+import { useSettings, logoOf } from './settings.js';
 import { QR_PREFIX } from './StudentQR.jsx';
 import { code128Bars } from './barcode.js';
 
@@ -34,7 +34,7 @@ export function IdCard({ person, qrSrc, settings, back }) {
   if (back) {
     return (
       <div className="idcard back">
-        <div className="idcard-band small-band">{settings.school_name}</div>
+        <div className="idcard-band small-band"><img className="idcard-logo sm" src={logoOf(settings)} alt="" />{settings.school_name}</div>
         <div className="idcard-back-body">
           <p>{settings.card_note}</p>
           {settings.address && <p>{settings.address}</p>}
@@ -48,7 +48,7 @@ export function IdCard({ person, qrSrc, settings, back }) {
   return (
     <div className={`idcard ${person.kind}`}>
       <div className="idcard-band">
-        <span className="idcard-logo">۞</span>
+        <img className="idcard-logo" src={logoOf(settings)} alt="" />
         <div>
           <div className="idcard-school">{settings.school_name}</div>
           <div className="idcard-year">{person.kind === 'teacher' ? 'STAFF' : 'STUDENT'} · {settings.academic_year}</div>
@@ -157,8 +157,8 @@ export function studentToCard(s, klass) {
 }
 
 export default function IdCards({ profile }) {
-  const isAdmin = profile.role === 'admin';
-  const classes = useQuery(() => fetchMyClasses(profile), [profile.id]);
+  const isAdmin = profile.role === 'admin' || (profile.permissions || []).includes('idcards');
+  const classes = useQuery(() => fetchMyClasses(profile, 'idcards'), [profile.id]);
   const students = useQuery(() =>
     supabase.from('students').select('*')
       .eq('status', 'approved').order('full_name'), [profile.id]);

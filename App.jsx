@@ -16,6 +16,7 @@ import IdCards from './IdCards.jsx';
 import Activity from './Activity.jsx';
 import Settings from './Settings.jsx';
 import { loadSettings } from './settings.js';
+import { AREAS } from './perms.js';
 
 const TABS = {
   student: [
@@ -126,7 +127,17 @@ export default function App() {
     );
   }
 
-  const tabs = TABS[profile.role] || TABS.student;
+  let tabs = TABS[profile.role] || TABS.student;
+  if (profile.role === 'teacher' && (profile.permissions || []).length) {
+    // own-class tabs plus the areas the admin has ticked, in the admin menu order
+    const granted = new Set(profile.permissions);
+    const own = new Set(TABS.teacher.map(([k]) => k));
+    tabs = [
+      ...TABS.admin.filter(([k]) => granted.has(k) && !own.has(k) && AREAS.some(([a]) => a === k)),
+      ...TABS.teacher,
+    ];
+    if (granted.has('dashboard')) tabs = [tabs.find(([k]) => k === 'dashboard'), ...tabs.filter(([k]) => k !== 'dashboard')];
+  }
   const current = tabs.some(([k]) => k === tab) ? tab : tabs[0][0];
 
   const pages = {

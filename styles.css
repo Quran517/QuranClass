@@ -313,3 +313,6 @@ tr.warn td { background: var(--amber-bg); }
 .scan-tip { margin: 6px 0 0; }
 .scanner-view video { object-fit: cover; }
 .typed-id input::placeholder { text-transform: none; }
+.access-list { border: 1px solid var(--line); border-radius: 10px; margin: 10px 0 14px; }
+.access-list .pick-row { align-items: flex-start; }
+.access-list .pick-row input { margin-top: 3px; }

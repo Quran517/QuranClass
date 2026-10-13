@@ -9,7 +9,7 @@ import { unlockSound, scanSound, scanVibrate } from './sound.js';
 const STATUSES = ['present', 'late', 'absent', 'excused'];
 
 export default function Attendance({ profile }) {
-  const classes = useQuery(() => fetchMyClasses(profile), [profile.id]);
+  const classes = useQuery(() => fetchMyClasses(profile, 'attendance'), [profile.id]);
   const [classId, setClassId] = useState('');
   const [date, setDate] = useState(today());
   const [students, setStudents] = useState([]);

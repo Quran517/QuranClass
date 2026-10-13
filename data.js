@@ -26,10 +26,12 @@ export const fetchClasses = () =>
 export const fetchTeachers = () =>
   supabase.from('profiles').select('id, full_name, email, phone, role, staff_code').in('role', ['teacher', 'admin']).order('full_name');
 
-// Classes this person can take attendance / reports for.
-export function fetchMyClasses(profile) {
+// Classes this person can work with in an area (attendance, reports, idcards).
+// Admins and teachers given that area see all classes; others only their own.
+export function fetchMyClasses(profile, area) {
   let q = supabase.from('classes').select('*').order('name');
-  if (profile.role !== 'admin') q = q.eq('teacher_id', profile.id);
+  const all = profile.role === 'admin' || (area && (profile.permissions || []).includes(area));
+  if (!all) q = q.eq('teacher_id', profile.id);
   return q;
 }
 
