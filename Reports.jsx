@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
-import { today, daysAgo, formatDate, STATUS_LABELS } from './util.js';
+import { today, formatDate, STATUS_LABELS, classDates } from './util.js';
+import { getSettings } from './settings.js';
 import { downloadExcel, downloadPdf } from './exports.js';
 
 // Supabase returns at most 1000 rows per request, so page through.
@@ -23,7 +24,7 @@ const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 export default function Reports({ profile }) {
   const classes = useQuery(() => fetchMyClasses(profile, 'reports'), [profile.id]);
   const [classId, setClassId] = useState('all');
-  const [from, setFrom] = useState(daysAgo(30));
+  const [from, setFrom] = useState(() => classDates(getSettings().class_days, 8)[0] || today()); // last 8 class days
   const [to, setTo] = useState(today());
   const [view, setView] = useState('students');
   const [data, setData] = useState(null);

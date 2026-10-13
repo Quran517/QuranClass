@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchAllRows } from './data.js';
-import { today, daysAgo, formatDate } from './util.js';
+import { today, formatDate, lastClassDay, isClassDay, classDaysLabel, classDates } from './util.js';
+import { getSettings, useSettings } from './settings.js';
 import { downloadExcel } from './exports.js';
 import { roleLabel } from './perms.js';
 import { unlockSound, scanSound, scanVibrate } from './sound.js';
@@ -11,7 +12,8 @@ const STATUSES = [['present', 'Present'], ['late', 'Late'], ['absent', 'Absent']
 const time = (ts) => (ts ? new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '');
 
 export default function StaffAttendance() {
-  const [date, setDate] = useState(today());
+  const settings = useSettings();
+  const [date, setDate] = useState(() => lastClassDay(getSettings().class_days));
   const [staff, setStaff] = useState([]);
   const [rows, setRows] = useState({});     // profile_id -> saved row
   const [marks, setMarks] = useState({});   // profile_id -> status (incl. unsaved)
@@ -22,7 +24,7 @@ export default function StaffAttendance() {
   const [scanning, setScanning] = useState(false);
   const [typed, setTyped] = useState('');
   const [feed, setFeed] = useState([]);
-  const [from, setFrom] = useState(daysAgo(29));
+  const [from, setFrom] = useState(() => classDates(getSettings().class_days, 8)[0] || today()); // last 8 class days
   const [to, setTo] = useState(today());
 
   async function load() {
@@ -111,6 +113,7 @@ export default function StaffAttendance() {
           <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
           <button className={scanning ? 'btn danger' : 'btn'} onClick={() => { unlockSound(); setScanning(!scanning); }}>{scanning ? 'Stop scanner' : 'Scan staff cards'}</button>
         </div>
+        {!isClassDay(date, settings.class_days) && <p className="notice-line small">⚠ {formatDate(date)} is not a class day (class is on {classDaysLabel(settings.class_days)}). <button className="link" onClick={() => setDate(lastClassDay(settings.class_days))}>Go to last class — {formatDate(lastClassDay(settings.class_days))}</button></p>}
         <form className="filters typed-id" onSubmit={(e) => { e.preventDefault(); unlockSound(); onScan(typed); setTyped(''); }}>
           <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type or scan teacher ID (e.g. TC1002) and press Enter" aria-label="Staff ID" />
           <button className="btn ghost" disabled={!typed.trim()}>Mark present</button>

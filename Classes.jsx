@@ -84,7 +84,7 @@ export default function Classes() {
             <label className="span2">Class name *<input name="name" required defaultValue={editing.name || ''} placeholder="e.g. Hifz Boys A" /></label>
             <label>Group<input name="group_name" defaultValue={editing.group_name || ''} placeholder="e.g. Boys · Group A · Morning" /></label>
             <label>Level<input name="level" defaultValue={editing.level || ''} placeholder="e.g. Beginners / Qaida" /></label>
-            <label className="span2">Schedule<input name="schedule" defaultValue={editing.schedule || ''} placeholder="e.g. Sun–Thu 4:00–5:30 pm" /></label>
+            <label className="span2">Schedule<input name="schedule" defaultValue={editing.schedule || ''} placeholder="e.g. Every Saturday 4:00–6:00 pm" /></label>
             <label className="span2">Teacher
               <select name="teacher_id" defaultValue={editing.teacher_id || ''}>
                 <option value="">Not assigned</option>

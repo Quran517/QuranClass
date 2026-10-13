@@ -342,3 +342,14 @@ tr.warn td { background: var(--amber-bg); }
 .checkin { border-left: 4px solid var(--green); }
 .badge.leave { background: #eef0f4; color: #556; }
 .sep { border: 0; border-top: 1px solid var(--line); margin: 6px 0 14px; }
+.auto-classes { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.auto-class { border: 1px solid var(--line); border-left: 4px solid var(--green); border-radius: 10px; padding: 10px 12px; display: flex; flex-direction: column; gap: 4px; }
+.auto-class .names { overflow-wrap: anywhere; }
+.auto-class .link { align-self: flex-start; padding: 0; }
+.idcard-tag { display: inline-block; background: var(--orange); color: #fff; font-weight: 700; font-size: 2.3mm; line-height: 1.2; padding: .5mm 1.6mm; border-radius: 1mm; margin: 0 0 .8mm; max-width: 100%; overflow-wrap: anywhere; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+
+/* not-a-class-day warning */
+.notice-line { background: #fff4e0; border: 1px solid #f0c27a; color: #7a4b00; border-radius: 8px; padding: 6px 10px; margin: 8px 0; }
+fieldset.class-days { border: 1px solid var(--line, #ddd); border-radius: 10px; padding: 8px 12px 12px; display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; }
+fieldset.class-days legend { font-weight: 600; padding: 0 4px; }
+label.check.inline { align-items: center; gap: 6px; }

@@ -1,17 +1,20 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
-import { today, formatDate, whatsappLink, STATUS_LABELS } from './util.js';
+import { today, formatDate, whatsappLink, STATUS_LABELS, lastClassDay, isClassDay, classDaysLabel } from './util.js';
+import { getSettings, useSettings } from './settings.js';
 import QrScanner from './QrScanner.jsx';
 import { QR_PREFIX } from './StudentQR.jsx';
 import { unlockSound, scanSound, scanVibrate } from './sound.js';
 
 const STATUSES = ['present', 'late', 'absent', 'excused'];
+const AUTO = 'auto'; // scan any card: class & group found automatically
 
 export default function Attendance({ profile }) {
   const classes = useQuery(() => fetchMyClasses(profile, 'attendance'), [profile.id]);
   const [classId, setClassId] = useState('');
-  const [date, setDate] = useState(today());
+  const settings = useSettings();
+  const [date, setDate] = useState(() => lastClassDay(getSettings().class_days));
   const [students, setStudents] = useState([]);
   const [marks, setMarks] = useState({});      // student_id -> status (unsaved edits included)
   const [saved, setSaved] = useState({});      // student_id -> status as stored
@@ -19,17 +22,31 @@ export default function Attendance({ profile }) {
   const [scanning, setScanning] = useState(false);
   const [feed, setFeed] = useState([]);
   const [typedId, setTypedId] = useState('');
+  const [autoRows, setAutoRows] = useState([]);
   const [sound, setSound] = useState(() => { try { return localStorage.getItem('qc-scan-sound') !== 'off'; } catch { return true; } });        // recent scan results
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
   const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!classId && classes.data?.length) setClassId(classes.data[0].id);
+    if (!classId && classes.data?.length) setClassId(AUTO);
   }, [classes.data, classId]);
 
   async function load() {
     if (!classId) return;
+    if (classId === AUTO) {
+      setLoading(true); setErr('');
+      const ids = (classes.data || []).map((c) => c.id);
+      const { data, error } = ids.length
+        ? await supabase.from('attendance').select('student_id, class_id, status, marked_at, students(full_name, student_code)')
+            .in('class_id', ids).eq('att_date', date).order('marked_at', { ascending: false })
+        : { data: [] };
+      if (error) setErr(error.message);
+      setAutoRows(data || []);
+      setStudents([]); setSaved({}); setMarks({});
+      setLoading(false);
+      return;
+    }
     setLoading(true); setErr(''); setMsg('');
     const [{ data: st, error: e1 }, { data: at, error: e2 }] = await Promise.all([
       supabase.from('students').select('id, full_name, student_code, guardian_name, guardian_phone, whatsapp')
@@ -46,6 +63,7 @@ export default function Attendance({ profile }) {
 
   useEffect(() => { load(); }, [classId, date]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const auto = classId === AUTO;
   const klass = (classes.data || []).find((c) => c.id === classId);
   const dirty = students.filter((s) => marks[s.id] && marks[s.id] !== saved[s.id]);
 
@@ -102,8 +120,12 @@ export default function Attendance({ profile }) {
     const value = String(text || '').trim();
     if (!value) return;
     let { data, error } = await supabase.rpc('mark_attendance_scan', {
-      p_value: value, p_class: classId, p_date: date, p_add_to_class: addToClass,
+      p_value: value, p_class: auto ? null : classId, p_date: date, p_add_to_class: addToClass,
     });
+    if (error && auto && /mark_attendance_scan|null value|invalid input/.test(error.message)) {
+      signal('error', 'Automatic class needs update-14.sql in Supabase. For now, choose the class first.');
+      return;
+    }
     if (error && /mark_attendance_scan/.test(error.message)) {
       // Database update 7 not installed yet: fall back to QR-only scanning.
       const token = value.startsWith(QR_PREFIX) ? value.slice(QR_PREFIX.length) : value;
@@ -125,12 +147,13 @@ export default function Attendance({ profile }) {
       return;
     }
     const already = data.already || saved[data.student_id] === 'present';
-    if (data.added_to_class) await load();
+    if (data.added_to_class || auto) await load();
     setMarks((m) => ({ ...m, [data.student_id]: 'present' }));
     setSaved((m) => ({ ...m, [data.student_id]: 'present' }));
+    const where = data.class_name ? ` · ${data.class_name}${data.group_name ? ' · ' + data.group_name : ''}` : '';
     signal(already ? 'repeat' : 'ok',
-      already ? `${data.full_name} — already marked present`
-        : `${data.full_name} — present${data.added_to_class ? ' (added to this class)' : ''}`);
+      (already ? `${data.full_name} — already marked present`
+        : `${data.full_name} — present${data.added_to_class ? ' (added to this class)' : ''}`) + where);
   }
 
   async function typed(e) {
@@ -151,7 +174,9 @@ export default function Attendance({ profile }) {
     );
   }
 
-  const counts = STATUSES.reduce((a, k) => ({ ...a, [k]: students.filter((s) => saved[s.id] === k).length }), {});
+  const counts = auto
+    ? STATUSES.reduce((a, k) => ({ ...a, [k]: autoRows.filter((r) => r.status === k).length }), {})
+    : STATUSES.reduce((a, k) => ({ ...a, [k]: students.filter((s) => saved[s.id] === k).length }), {});
   const unmarked = students.filter((s) => !marks[s.id]).length;
 
   return (
@@ -160,7 +185,8 @@ export default function Attendance({ profile }) {
         <h2>Take attendance</h2>
         <div className="filters">
           <select value={classId} onChange={(e) => { setClassId(e.target.value); setScanning(false); }} aria-label="Class">
-            {classes.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            <option value={AUTO}>🔍 Automatic — any class (scan cards)</option>
+            {classes.data.map((c) => <option key={c.id} value={c.id}>{c.name}{c.group_name ? ` · ${c.group_name}` : ''}</option>)}
           </select>
           <input type="date" value={date} max={today()} onChange={(e) => setDate(e.target.value)} aria-label="Date" />
           <button className={sound ? 'btn ghost' : 'btn ghost muted-btn'} onClick={toggleSound} aria-pressed={sound} title="Beep when a code is scanned">
@@ -170,7 +196,8 @@ export default function Attendance({ profile }) {
             {scanning ? 'Stop scanner' : 'Scan cards'}
           </button>
         </div>
-        {klass?.schedule && <p className="small muted">{klass.schedule}</p>}
+        {!isClassDay(date, settings.class_days) && <p className="notice-line small">⚠ {formatDate(date)} is not a class day (class is on {classDaysLabel(settings.class_days)}). <button className="link" onClick={() => setDate(lastClassDay(settings.class_days))}>Go to last class — {formatDate(lastClassDay(settings.class_days))}</button></p>}
+        {auto ? <p className="small muted">Automatic mode: each scanned student is marked present in <b>their own class and group</b>.</p> : klass?.schedule && <p className="small muted">{klass.schedule}</p>}
 
         <form className="filters typed-id" onSubmit={typed}>
           <input value={typedId} onChange={(e) => setTypedId(e.target.value)} autoComplete="off" autoCapitalize="characters"
@@ -199,7 +226,7 @@ export default function Attendance({ profile }) {
         )}
 
         <div className="stats compact">
-          <div className="stat"><b>{students.length}</b><span>Students</span></div>
+          <div className="stat"><b>{auto ? classes.data.length : students.length}</b><span>{auto ? 'Classes' : 'Students'}</span></div>
           <div className="stat"><b>{counts.present}</b><span>Present</span></div>
           <div className="stat"><b>{counts.late}</b><span>Late</span></div>
           <div className="stat"><b>{counts.absent}</b><span>Absent</span></div>
@@ -207,6 +234,33 @@ export default function Attendance({ profile }) {
         </div>
       </section>
 
+      {auto ? (
+        <section className="card">
+          <h2>{formatDate(date)} — scanned by class</h2>
+          <p className="small muted">Scan any student card: the system finds their class and group by itself. To mark absent / late / excused, choose a class above.</p>
+          {err && <p className="error">{err}</p>}
+          {loading ? <div className="spinner" /> : (
+            <div className="auto-classes">
+              {classes.data.map((c) => {
+                const rows = autoRows.filter((a) => a.class_id === c.id);
+                const came = rows.filter((a) => a.status === 'present' || a.status === 'late');
+                return (
+                  <div key={c.id} className="auto-class">
+                    <div className="row-between">
+                      <div><b>{c.name}</b>{c.group_name && <span className="small muted"> · {c.group_name}</span>}</div>
+                      <span className="badge present">{came.length} present</span>
+                    </div>
+                    {came.length > 0 && (
+                      <div className="small muted names">{came.map((a) => a.students?.full_name).filter(Boolean).join(', ')}</div>
+                    )}
+                    <button className="link small" onClick={() => setClassId(c.id)}>Open this class</button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      ) : (
       <section className="card">
         <div className="row-between">
           <h2>{formatDate(date)}</h2>
@@ -254,6 +308,7 @@ export default function Attendance({ profile }) {
           </button>
         </div>
       </section>
+      )}
     </>
   );
 }

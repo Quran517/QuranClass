@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchAllRows } from './data.js';
 import { useSettings } from './settings.js';
-import { today, daysAgo, formatDate } from './util.js';
+import { today, formatDate, classDates, classDaysLabel } from './util.js';
 import { useActivity } from './Activity.jsx';
 
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
@@ -14,7 +14,7 @@ function TrendChart({ days, limit }) {
   const bw = (W - pad.l - pad.r) / days.length;
   const y = (v) => pad.t + (H - pad.t - pad.b) * (1 - v / 100);
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="trend" role="img" aria-label="Attendance percentage for the last 14 days">
+    <svg viewBox={`0 0 ${W} ${H}`} className="trend" role="img" aria-label="Attendance percentage for the last 10 classes">
       {[0, 50, 100].map((g) => (
         <g key={g}>
           <line x1={pad.l} x2={W - pad.r} y1={y(g)} y2={y(g)} className="grid" />
@@ -32,7 +32,7 @@ function TrendChart({ days, limit }) {
                 <title>{`${label}: ${d.pct}% (${d.marked} marked)`}</title>
               </rect>
             ) : (
-              <rect x={x} y={y(0) - 2} width={w} height="2" className="bar empty"><title>{`${label}: no class`}</title></rect>
+              <rect x={x} y={y(0) - 2} width={w} height="2" className="bar empty"><title>{`${label}: not marked`}</title></rect>
             )}
             {d.marked > 0 && bw > 34 && <text x={x + w / 2} y={y(d.pct) - 3} textAnchor="middle" className="val">{d.pct}</text>}
             {(i % 2 === 0 || bw > 50) && <text x={x + w / 2} y={H - 8} textAnchor="middle" className="axis">{label}</text>}
@@ -51,7 +51,10 @@ export default function Dashboard({ go }) {
 
   async function load() {
     const count = (q) => q.then(({ count: c }) => c || 0);
-    const since = daysAgo(29);
+    const cdays = settings.class_days;
+    const trendDates = classDates(cdays, 10);   // last 10 class days
+    const lowDates = classDates(cdays, 8);      // last 8 class days
+    const since = trendDates[0] || today();
     const [pending, approved, unassigned, teachers, classes, students, att] = await Promise.all([
       count(supabase.from('students').select('id', { count: 'exact', head: true }).eq('status', 'pending')),
       count(supabase.from('students').select('id', { count: 'exact', head: true }).eq('status', 'approved')),
@@ -62,25 +65,26 @@ export default function Dashboard({ go }) {
       fetchAllRows(() => supabase.from('attendance').select('student_id, class_id, att_date, status').gte('att_date', since)),
     ]);
 
-    // last 14 days trend
-    const days = [];
-    for (let i = 13; i >= 0; i--) {
-      const date = daysAgo(i);
+    // trend over the last 10 class days (plus any extra day that has attendance marked)
+    const dateSet = new Set([...trendDates, ...att.map((a) => a.att_date)]);
+    const days = [...dateSet].sort().slice(-10).map((date) => {
       const rows = att.filter((a) => a.att_date === date);
-      days.push({ date, marked: rows.length, pct: pct(rows.filter((a) => attended(a.status)).length, rows.length) });
-    }
+      return { date, marked: rows.length, pct: pct(rows.filter((a) => attended(a.status)).length, rows.length) };
+    });
 
-    // today by class
-    const t = today();
+    // last class by class: the latest class day, or a later day with attendance marked
+    const t = [trendDates[trendDates.length - 1] || today(), ...att.map((a) => a.att_date)].sort().pop();
     const byClass = classes.map((c) => {
       const enrolled = students.filter((s) => s.class_id === c.id).length;
       const rows = att.filter((a) => a.class_id === c.id && a.att_date === t);
       return { ...c, enrolled, marked: rows.length, came: rows.filter((a) => attended(a.status)).length };
     });
 
-    // low attendance over the last 30 days (at least 3 sessions marked)
+    // low attendance over the last 8 class days (at least 3 sessions marked)
+    const lowSince = lowDates[0] || since;
+    const recent = att.filter((a) => a.att_date >= lowSince);
     const per = {};
-    for (const a of att) {
+    for (const a of recent) {
       per[a.student_id] ||= { total: 0, came: 0 };
       per[a.student_id].total += 1;
       if (attended(a.status)) per[a.student_id].came += 1;
@@ -95,7 +99,8 @@ export default function Dashboard({ go }) {
     setD({
       pending, approved, unassigned, teachers, classes: classes.length, days, byClass, low,
       todayMarked: todayRows.length, todayCame: todayRows.filter((a) => attended(a.status)).length,
-      month: pct(att.filter((a) => attended(a.status)).length, att.length),
+      month: pct(recent.filter((a) => attended(a.status)).length, recent.length),
+      lastDate: t,
     });
     setUpdated(new Date());
   }
@@ -105,7 +110,7 @@ export default function Dashboard({ go }) {
     activity.reload();
     const id = setInterval(() => { load(); activity.reload(); }, 60000);
     return () => clearInterval(id);
-  }, [settings.low_attendance_pct]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [settings.low_attendance_pct, (settings.class_days || []).join()]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (!d) return <div className="spinner" aria-label="Loading" />;
 
@@ -117,15 +122,15 @@ export default function Dashboard({ go }) {
         <div className="row-between">
           <div>
             <h2>Assalamu Alaikum</h2>
-            <p className="muted small">{settings.school_name} · {settings.academic_year}</p>
+            <p className="muted small">{settings.school_name} · {settings.academic_year} · Class every {classDaysLabel(settings.class_days)}</p>
           </div>
           <span className="small muted live"><span className="dot" /> Live · updated {updated?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
         </div>
         <div className="stats">
           <button className="stat clickable" onClick={() => go('attendance')}>
-            <b>{d.todayMarked ? pct(d.todayCame, d.todayMarked) + '%' : '—'}</b><span>Today ({d.todayCame}/{d.todayMarked} marked)</span>
+            <b>{d.todayMarked ? pct(d.todayCame, d.todayMarked) + '%' : '—'}</b><span>Last class · {formatDate(d.lastDate)} ({d.todayCame}/{d.todayMarked} marked)</span>
           </button>
-          <button className="stat clickable" onClick={() => go('reports')}><b>{d.month}%</b><span>Last 30 days</span></button>
+          <button className="stat clickable" onClick={() => go('reports')}><b>{d.month}%</b><span>Last 8 classes</span></button>
           <button className={`stat clickable ${d.pending ? 'attention' : ''}`} onClick={() => go('admissions')}><b>{d.pending}</b><span>Pending admissions</span></button>
           <button className="stat clickable" onClick={() => go('students')}><b>{d.approved}</b><span>Enrolled students</span></button>
           <button className="stat clickable" onClick={() => go('classes')}><b>{d.classes}</b><span>Classes</span></button>
@@ -142,14 +147,14 @@ export default function Dashboard({ go }) {
       )}
 
       <section className="card">
-        <h2>Attendance — last 14 days</h2>
+        <h2>Attendance — last 10 classes</h2>
         <TrendChart days={d.days} limit={settings.low_attendance_pct} />
         <p className="small muted">Bars show the share of marked students who attended (present or late). Orange = below {settings.low_attendance_pct}%.</p>
       </section>
 
       <div className="two-col">
         <section className="card">
-          <div className="row-between"><h2>Today by class</h2><button className="btn small" onClick={() => go('attendance')}>Take attendance</button></div>
+          <div className="row-between"><h2>Last class by class <span className="small muted">{formatDate(d.lastDate)}</span></h2><button className="btn small" onClick={() => go('attendance')}>Take attendance</button></div>
           {d.byClass.length === 0 ? <p className="muted">No classes yet.</p> : (
             <ul className="class-today">
               {d.byClass.map((c) => (
@@ -164,7 +169,7 @@ export default function Dashboard({ go }) {
         </section>
 
         <section className="card">
-          <h2>Low attendance <span className="small muted">below {settings.low_attendance_pct}% · 30 days</span></h2>
+          <h2>Low attendance <span className="small muted">below {settings.low_attendance_pct}% · last 8 classes</span></h2>
           {d.low.length === 0 ? <p className="muted">No students below the limit. Alhamdulillah.</p> : (
             <ul className="low-list">
               {d.low.slice(0, 8).map((s) => (

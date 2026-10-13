@@ -14,6 +14,7 @@ export const DEFAULT_SETTINGS = {
   address: '',
   card_note: 'If found, please return to SLIS-Jeddah Quran Class.',
   low_attendance_pct: 75,
+  class_days: [6], // weekdays the class meets (0 = Sunday … 6 = Saturday)
   backup_every_days: 7,
   allow_signup: true,
   logo_url: null,
@@ -28,7 +29,7 @@ export function getSettings() {
 }
 
 function publish(next) {
-  current = { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(next || {}).filter(([, v]) => v !== null && v !== '')), last_backup_at: next?.last_backup_at ?? null, logo_url: next?.logo_url ?? null };
+  current = { ...DEFAULT_SETTINGS, ...Object.fromEntries(Object.entries(next || {}).filter(([, v]) => v !== null && v !== '' && !(Array.isArray(v) && !v.length))), last_backup_at: next?.last_backup_at ?? null, logo_url: next?.logo_url ?? null };
   listeners.forEach((fn) => fn(current));
 }
 

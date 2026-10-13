@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchAllRows, fetchMyClasses } from './data.js';
 import { useSettings } from './settings.js';
-import { today, waNumber, whatsappLink, realEmail } from './util.js';
+import { waNumber, whatsappLink, realEmail, formatDate } from './util.js';
 
 const TEMPLATES = [
   ['Blank', ''],
@@ -32,6 +32,7 @@ export default function Messages({ profile }) {
   const [classes, setClasses] = useState([]);
   const [students, setStudents] = useState(null);
   const [absentToday, setAbsentToday] = useState(new Set());
+  const [lastClass, setLastClass] = useState(null);
   const [err, setErr] = useState('');
   const [group, setGroup] = useState('all');
   const [subject, setSubject] = useState('');
@@ -54,8 +55,14 @@ export default function Messages({ profile }) {
           return q;
         });
         setStudents(rows);
-        const { data: abs } = await supabase.from('attendance').select('student_id').eq('att_date', today()).eq('status', 'absent');
-        setAbsentToday(new Set((abs || []).map((a) => a.student_id)));
+        // students absent at the most recent class that has attendance marked
+        const { data: last } = await supabase.from('attendance').select('att_date').order('att_date', { ascending: false }).limit(1);
+        const lastDate = last?.[0]?.att_date || null;
+        setLastClass(lastDate);
+        if (lastDate) {
+          const { data: abs } = await supabase.from('attendance').select('student_id').eq('att_date', lastDate).eq('status', 'absent');
+          setAbsentToday(new Set((abs || []).map((a) => a.student_id)));
+        }
       } catch (e) {
         setErr(e.message);
         setStudents([]);
@@ -120,7 +127,7 @@ export default function Messages({ profile }) {
             <select value={group} onChange={(e) => { setGroup(e.target.value); setSent({}); }}>
               <option value="all">All parents</option>
               {classes.map((c) => <option key={c.id} value={c.id}>Class: {c.name}{c.group_name ? ` (${c.group_name})` : ''}</option>)}
-              <option value="absent">Parents of students absent today</option>
+              <option value="absent">Parents of students absent at last class{lastClass ? ` (${formatDate(lastClass)})` : ''}</option>
               {(profile.role === 'admin' || (profile.permissions || []).includes('messages')) && <option value="none">Students with no class</option>}
             </select>
           </label>

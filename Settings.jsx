@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchAllRows } from './data.js';
 import { useSettings, saveSettings, setLastBackup, logoOf } from './settings.js';
-import { formatDate } from './util.js';
+import { formatDate, WEEKDAYS } from './util.js';
 import { downloadExcel } from './exports.js';
 
 const FIELDS = [
@@ -128,7 +128,15 @@ export default function Settings() {
       values.low_attendance_pct = Number(f.low_attendance_pct) || 75;
       values.backup_every_days = Number(f.backup_every_days) || 7;
       values.allow_signup = f.allow_signup !== false;
-      await saveSettings(values);
+      const cd = Array.isArray(f.class_days) ? f.class_days : [6];
+      if (!cd.length) throw new Error('Tick at least one class day.');
+      values.class_days = cd;
+      try {
+        await saveSettings(values);
+      } catch (e3) {
+        if (/class_days/.test(e3.message)) throw new Error('Class days need update-15.sql. Run it in Supabase → SQL Editor, then save again.');
+        throw e3;
+      }
       setMsg('Settings saved.');
     } catch (e2) {
       setErr(e2.message);
@@ -222,6 +230,19 @@ export default function Settings() {
               <input type={type} required={req} value={f[k] || ''} onChange={(e) => setF({ ...f, [k]: e.target.value })} />
             </label>
           ))}
+          <fieldset className="span2 class-days">
+            <legend>Class days <span className="small muted">— attendance, dashboard and reports follow these days</span></legend>
+            {[6, 0, 1, 2, 3, 4, 5].map((i) => {
+              const cur = Array.isArray(f.class_days) ? f.class_days : [6];
+              return (
+                <label key={i} className="check inline">
+                  <input type="checkbox" checked={cur.includes(i)}
+                    onChange={(e) => setF({ ...f, class_days: e.target.checked ? [...cur, i].sort() : cur.filter((x) => x !== i) })} />
+                  <span>{WEEKDAYS[i]}</span>
+                </label>
+              );
+            })}
+          </fieldset>
           <label>Low attendance warning below (%)
             <input type="number" min="1" max="100" value={f.low_attendance_pct} onChange={(e) => setF({ ...f, low_attendance_pct: e.target.value })} />
           </label>

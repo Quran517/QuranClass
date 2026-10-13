@@ -9,6 +9,44 @@ export function daysAgo(n) {
   return d.toLocaleDateString('en-CA');
 }
 
+// ---- Class days (the class meets on set weekdays; default Saturday) ----
+export const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const iso = (d) => d.toLocaleDateString('en-CA');
+const okDays = (days) => (Array.isArray(days) && days.length ? days.map(Number) : [6]);
+
+export function isClassDay(date, days) {
+  return okDays(days).includes(new Date(date + 'T00:00:00').getDay());
+}
+
+// Today if it is a class day, otherwise the most recent class day.
+export function lastClassDay(days) {
+  const set = okDays(days);
+  const d = new Date();
+  for (let i = 0; i < 7; i++) {
+    if (set.includes(d.getDay())) return iso(d);
+    d.setDate(d.getDate() - 1);
+  }
+  return today();
+}
+
+// The last n class days up to today, oldest first.
+export function classDates(days, n) {
+  const set = okDays(days);
+  const out = [];
+  const d = new Date();
+  for (let i = 0; i < 400 && out.length < n; i++) {
+    if (set.includes(d.getDay())) out.unshift(iso(d));
+    d.setDate(d.getDate() - 1);
+  }
+  return out;
+}
+
+// "Saturday", "Friday & Saturday", "Thursday, Friday & Saturday"
+export function classDaysLabel(days) {
+  const names = okDays(days).slice().sort((a, b) => a - b).map((i) => WEEKDAYS[i]);
+  return names.length > 1 ? names.slice(0, -1).join(', ') + ' & ' + names[names.length - 1] : names[0];
+}
+
 export function formatDate(value) {
   if (!value) return '';
   const d = new Date(value.length === 10 ? value + 'T00:00:00' : value);
