@@ -307,3 +307,9 @@ tr.warn td { background: var(--amber-bg); }
 .feed li.latest { font-size: 1.05rem; padding: 12px; animation: pop .25s ease-out; }
 .muted-btn { opacity: .7; }
 @keyframes pop { from { transform: scale(.96); opacity: .4; } to { transform: none; opacity: 1; } }
+.typed-id { margin-top: 10px; }
+.typed-id input { text-transform: uppercase; }
+.feed .add-class { margin: 8px 0 0; display: flex; }
+.scan-tip { margin: 6px 0 0; }
+.scanner-view video { object-fit: cover; }
+.typed-id input::placeholder { text-transform: none; }
