@@ -2,7 +2,7 @@
 export const KINDS = [
   ['hifz', 'Hifz (new memorisation)'],
   ['revision', 'Revision (muraja\'ah)'],
-  ['reading', 'Reading (nazira)'],
+  ['reading', 'Recitation (tilawah / nazira)'],
   ['qaida', 'Qaida'],
   ['tajweed', 'Tajweed'],
   ['other', 'Other'],

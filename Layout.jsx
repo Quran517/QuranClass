@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useSettings, logoOf } from './settings.js';
 import { roleLabel } from './perms.js';
+import Notifications from './Notifications.jsx';
 
 
 export default function Layout({ profile, tabs, current, onTab, children }) {
@@ -19,7 +20,10 @@ export default function Layout({ profile, tabs, current, onTab, children }) {
               <div className="brand-sub">{profile.full_name || profile.email} · {roleLabel(profile)}{profile.staff_code ? ` · ${profile.staff_code}` : ''}</div>
             </div>
           </div>
-          <button className="menu-btn" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)}>☰</button>
+          <div className="topbar-tools">
+            <Notifications onTab={(t) => onTab(tabs.some(([k]) => k === t) ? t : tabs[0][0])} />
+            <button className="menu-btn" aria-label="Menu" aria-expanded={open} onClick={() => setOpen(!open)}>☰</button>
+          </div>
         </div>
         <nav className={open ? 'nav open' : 'nav'}>
           {tabs.map(([key, label]) => (

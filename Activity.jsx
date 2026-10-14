@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { downloadExcel } from './exports.js';
 
-const TABLE_LABEL = { students: 'Student', classes: 'Class', attendance: 'Attendance', profiles: 'User', settings: 'Settings' };
+const TABLE_LABEL = { students: 'Student', classes: 'Class', attendance: 'Attendance', profiles: 'User', settings: 'Settings', exams: 'Exam', exam_marks: 'Marks', certificate_requests: 'Certificate', parent_links: 'Parent link', student_progress: 'Progress', team_members: 'Team', staff_attendance: 'Staff attendance' };
 const FIELD_LABEL = {
   full_name: 'name', class_id: 'class', teacher_id: 'teacher', guardian_name: 'guardian', guardian_phone: 'guardian phone',
   date_of_birth: 'date of birth', school_grade: 'school grade', quran_level: 'Quran level', att_date: 'date',
@@ -103,6 +103,11 @@ export default function Activity() {
           <option value="attendance">Attendance</option>
           <option value="profiles">Users</option>
           <option value="settings">Settings</option>
+          <option value="exams">Exams</option>
+          <option value="exam_marks">Marks</option>
+          <option value="certificate_requests">Certificates</option>
+          <option value="parent_links">Parent links</option>
+          <option value="student_progress">Progress</option>
         </select>
         <select value={action} onChange={(e) => setAction(e.target.value)} aria-label="Action">
           <option value="">Added, changed &amp; deleted</option>

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
-import { classTag } from './util.js';
+import { classTag, resizePhoto } from './util.js';
+import { roleLabel } from './perms.js';
+import Modal from './Modal.jsx';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
 import { useSettings, logoOf } from './settings.js';
@@ -34,7 +36,7 @@ function useQrImages(items) {
 export function IdCard({ person, qrSrc, settings, back }) {
   if (back) {
     return (
-      <div className="idcard back">
+      <div className={`idcard back ${person.variant || ''}`}>
         <div className="idcard-band small-band"><img className="idcard-logo sm" src={logoOf(settings)} alt="" />{settings.school_name}</div>
         <div className="idcard-back-body">
           <p>{settings.card_note}</p>
@@ -47,19 +49,20 @@ export function IdCard({ person, qrSrc, settings, back }) {
     );
   }
   return (
-    <div className={`idcard ${person.kind}`}>
+    <div className={`idcard ${person.kind} ${person.variant || ''} ${settings.show_card_photos === false ? 'no-photo' : ''}`}>
       <div className="idcard-band">
         <img className="idcard-logo" src={logoOf(settings)} alt="" />
         <div>
           <div className="idcard-school">{settings.school_name}</div>
-          <div className="idcard-year">{person.kind === 'teacher' ? 'STAFF' : 'STUDENT'} · {settings.academic_year}</div>
+          <div className="idcard-year">{person.kind === 'teacher' ? 'STAFF' : person.variant === 'girl' ? 'STUDENT · GIRLS' : person.variant === 'boy' ? 'STUDENT · BOYS' : 'STUDENT'} · {settings.academic_year}</div>
         </div>
       </div>
       <div className="idcard-body">
-        <div className="idcard-photo" aria-label="Photo">
-          <span>{initials(person.name)}</span>
-          <small>photo</small>
-        </div>
+        {settings.show_card_photos !== false && (
+          person.photo
+            ? <img className="idcard-photo has-photo" src={person.photo} alt={`Photo of ${person.name}`} />
+            : <div className="idcard-photo" aria-label="No photo"><span>{initials(person.name)}</span><small>photo</small></div>
+        )}
         <div className="idcard-info">
           <div className="idcard-name">{person.name}</div>
           <div className="idcard-id">{person.code}</div>
@@ -157,10 +160,10 @@ export function PrintCards({ people, withBack, paper = 'a4' }) {
   );
 }
 
-export function studentToCard(s, klass) {
+export function studentToCard(s, klass, photo) {
   const c = typeof klass === 'string' ? { name: klass } : klass || {};
   return {
-    id: s.id, kind: 'student', name: s.full_name, code: s.student_code,
+    id: s.id, kind: 'student', variant: s.gender === 'female' ? 'girl' : 'boy', photo: photo || null, gender: s.gender, name: s.full_name, code: s.student_code,
     tag: classTag(c) || 'No class yet',
     lines: [
       `Adm. No: ${s.admission_no || '—'}`,
@@ -180,7 +183,11 @@ export default function IdCards({ profile }) {
     supabase.from('students').select('*')
       .eq('status', 'approved').order('full_name'), [profile.id]);
   const staff = useQuery(() =>
-    supabase.from('profiles').select('id, full_name, email, phone, role, staff_code').in('role', ['teacher', 'admin']).order('full_name'), [profile.id]);
+    supabase.from('profiles').select('id, full_name, email, phone, role, staff_code, staff_title').in('role', ['teacher', 'admin']).order('full_name'), [profile.id]);
+  const photos = useQuery(() => supabase.from('card_photos').select('student_id, profile_id, data')
+    .then((r) => (r.error && /card_photos/.test(r.error.message) ? { data: [], error: null } : r)), [profile.id]);
+  const [design, setDesign] = useState('all');
+  const [photoFor, setPhotoFor] = useState(null);
 
   const [kind, setKind] = useState('student');
   const [classId, setClassId] = useState('all');
@@ -192,20 +199,27 @@ export default function IdCards({ profile }) {
   const classOf = (id) => (classes.data || []).find((c) => c.id === id);
   const teachesWhat = (pid) => (classes.data || []).filter((c) => c.teacher_id === pid).map((c) => c.name).join(', ');
 
+  const photoOf = useMemo(() => {
+    const m = {};
+    for (const p of photos.data || []) m[p.student_id || p.profile_id] = p.data;
+    return m;
+  }, [photos.data]);
+
   const people = useMemo(() => {
     if (kind === 'student') {
       return (students.data || [])
         .filter((s) => classId === 'all' || (classId === 'none' ? !s.class_id : s.class_id === classId))
-        .map((s) => studentToCard(s, classOf(s.class_id)));
+        .filter((s) => design === 'all' || (design === 'girl' ? s.gender === 'female' : s.gender !== 'female'))
+        .map((s) => studentToCard(s, classOf(s.class_id), photoOf[s.id]));
     }
     return (staff.data || []).map((p) => ({
-      id: p.id, kind: 'teacher', name: p.full_name || p.email, code: p.staff_code || '—',
-      lines: [p.role === 'admin' ? 'Administrator' : 'Teacher', teachesWhat(p.id)],
-      summary: p.role === 'admin' ? 'Administrator' : 'Teacher',
+      id: p.id, kind: 'teacher', variant: 'staff', photo: photoOf[p.id] || null, name: p.full_name || p.email, code: p.staff_code || '—',
+      lines: [p.role === 'admin' ? 'Administrator' : roleLabel(p), teachesWhat(p.id)],
+      summary: p.role === 'admin' ? 'Administrator' : roleLabel(p),
       barcode: p.staff_code || '',
       qr: `QCSLISJ-STAFF:${p.staff_code || p.id}`,
     }));
-  }, [kind, classId, students.data, staff.data, classes.data]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [kind, classId, design, students.data, staff.data, classes.data, photoOf]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const shown = people.filter((p) => !q || `${p.name} ${p.code} ${(p.lines || []).join(' ')}`.toLowerCase().includes(q.toLowerCase()));
   const selected = picked ? shown.filter((p) => picked[p.id]) : shown;
@@ -230,6 +244,13 @@ export default function IdCards({ profile }) {
               <option value="all">{isAdmin ? 'All classes' : 'All my classes'}</option>
               {isAdmin && <option value="none">No class yet</option>}
               {(classes.data || []).map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            </select>
+          )}
+          {kind === 'student' && (
+            <select value={design} onChange={(e) => setDesign(e.target.value)} aria-label="Card design">
+              <option value="all">Boys &amp; girls cards</option>
+              <option value="boy">Boys cards only (blue)</option>
+              <option value="girl">Girls cards only (maroon)</option>
             </select>
           )}
           <input placeholder="Search name or ID…" value={q} onChange={(e) => setQ(e.target.value)} />
@@ -262,6 +283,8 @@ export default function IdCards({ profile }) {
                     }} />
                   <span>{p.name} <span className="small muted">{p.code}</span></span>
                   <span className="small muted">{p.summary}</span>
+                  <span className={`design-dot ${p.variant}`} title={p.variant === 'girl' ? 'Girls design' : p.variant === 'staff' ? 'Staff design' : 'Boys design'} />
+                  <button type="button" className="btn ghost small photo-btn" onClick={(e) => { e.preventDefault(); setPhotoFor(p); }}>{p.photo ? '📷 Change' : '📷 Photo'}</button>
                 </label>
               ))}
             </div>
@@ -272,6 +295,8 @@ export default function IdCards({ profile }) {
         )}
       </section>
 
+      {photoFor && <PhotoModal person={photoFor} onClose={() => setPhotoFor(null)} onSaved={() => { setPhotoFor(null); photos.reload(); }} />}
+
       {selected.length > 0 && (
         <section className="card card-preview">
           <h2 className="no-print">Preview</h2>
@@ -279,5 +304,37 @@ export default function IdCards({ profile }) {
         </section>
       )}
     </>
+  );
+}
+
+// Optional card photo: chosen from the phone / computer, shrunk, stored privately.
+function PhotoModal({ person, onClose, onSaved }) {
+  const [img, setImg] = useState(person.photo || null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  async function pick(e) {
+    setErr('');
+    try { setImg(await resizePhoto(e.target.files?.[0])); } catch (x) { setErr(x.message); }
+  }
+  async function save(data) {
+    setBusy(true); setErr('');
+    const { error } = await supabase.rpc('set_photo', { p_kind: person.kind === 'teacher' ? 'staff' : 'student', p_id: person.id, p_photo: data });
+    setBusy(false);
+    if (error) setErr(/set_photo/.test(error.message) ? 'Photos are not installed yet. Run update-18.sql in Supabase.' : error.message);
+    else onSaved();
+  }
+  return (
+    <Modal title={`Photo — ${person.name}`} onClose={onClose}>
+      <p className="small muted">Optional. Use a clear, front-facing photo with a plain background. It is shrunk to a small size and shown only on ID cards. Ask parents' permission first.</p>
+      <div className="photo-edit">
+        {img ? <img src={img} alt="" /> : <div className="idcard-photo big"><span>{initials(person.name)}</span><small>no photo</small></div>}
+        <div className="actions">
+          <label className="btn ghost file-btn">Choose photo<input type="file" accept="image/*" capture="user" hidden onChange={pick} /></label>
+          {img && img !== person.photo && <button className="btn" disabled={busy} onClick={() => save(img)}>{busy ? 'Saving…' : 'Save photo'}</button>}
+          {person.photo && <button className="btn danger ghost" disabled={busy} onClick={() => save(null)}>Remove photo</button>}
+        </div>
+      </div>
+      {err && <p className="error">{err}</p>}
+    </Modal>
   );
 }

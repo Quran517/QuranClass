@@ -35,10 +35,10 @@ export async function downloadExcel(filename, sheets) {
   XLSX.writeFile(wb, filename);
 }
 
-export async function downloadPdf(filename, { title, subtitle, tables }) {
+export async function downloadPdf(filename, { title, subtitle, tables, orientation = 'landscape', print = false }) {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
-  const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
+  const doc = new jsPDF({ orientation, unit: 'pt', format: 'a4' });
   const navy = [9, 47, 107];
   const orange = [237, 91, 3];
 
@@ -92,5 +92,17 @@ export async function downloadPdf(filename, { title, subtitle, tables }) {
       doc.internal.pageSize.getHeight() - 20
     );
   }
+  finishPdf(doc, filename, print);
+}
+
+// Save the PDF, or open it with the print dialog.
+export function finishPdf(doc, filename, print) {
+  if (print) {
+    doc.autoPrint();
+    const w = window.open(doc.output('bloburl'), '_blank');
+    if (w) return;
+  }
   doc.save(filename);
 }
+
+export { logoData };

@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery } from './data.js';
 import { formatDate, whatsappLink, realEmail, cleanUsername, USERNAME_RULE, usernameError } from './util.js';
 import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
-import { AREAS, ASSISTANT_PERMS, roleLabel } from './perms.js';
+import { AREAS, ASSISTANT_PERMS, PRINCIPAL_PERMS, roleLabel } from './perms.js';
 
 function makePassword() {
   const words = ['Noor', 'Huda', 'Iqra', 'Sabr', 'Ilm', 'Amal', 'Rahma', 'Taqwa'];
@@ -42,6 +42,9 @@ export default function Users({ me }) {
   const [resetting, setResetting] = useState(null); // profile
   const [busy, setBusy] = useState(false);
   const [access, setAccess] = useState(null); // { profile, picked: Set }
+  const [kids, setKids] = useState(null);     // parent profile whose children are shown
+  const allStudents = useQuery(() => supabase.from('students').select('id, full_name, student_code, guardian_name, guardian_phone, whatsapp, email').neq('status', 'rejected').order('full_name'));
+  const pendingLinks = useQuery(() => supabase.from('parent_links').select('id, parent_id').eq('verified', false));
   const meAdmin = me.role === 'admin';
 
   async function saveAccess() {
@@ -61,12 +64,13 @@ export default function Users({ me }) {
   async function changeRole(p, choice) {
     setErr(''); setSaved('');
     if (p.id === me.id && choice !== 'admin' && !window.confirm('You are removing your own admin access. Continue?')) return;
-    const newRole = choice === 'assistant' ? 'teacher' : choice;
+    const newRole = choice === 'assistant' || choice === 'principal' ? 'teacher' : choice;
     const update = { role: newRole };
     if (meAdmin && newRole === 'teacher') {
-      update.staff_title = choice === 'assistant' ? 'assistant' : null;
+      update.staff_title = choice === 'assistant' || choice === 'principal' ? choice : null;
       if (choice === 'assistant') update.permissions = ASSISTANT_PERMS;
-      else if (p.staff_title === 'assistant') update.permissions = [];
+      else if (choice === 'principal') update.permissions = PRINCIPAL_PERMS;
+      else if (p.staff_title) update.permissions = [];
     }
     let { error } = await supabase.from('profiles').update(update).eq('id', p.id);
     if (error && /staff_title/.test(error.message)) {
@@ -74,7 +78,7 @@ export default function Users({ me }) {
       return;
     }
     if (error) setErr(/last admin/.test(error.message) ? 'This is the last admin — make someone else admin first.' : error.message);
-    else { setSaved(`${p.full_name || p.email} is now ${choice === 'assistant' ? 'an Admin assistant' : newRole}.`); list.reload(); }
+    else { setSaved(`${p.full_name || p.email} is now ${choice === 'assistant' ? 'an Admin assistant' : choice === 'principal' ? 'the Principal' : newRole}.`); list.reload(); }
   }
 
   async function removeLogin(p) {
@@ -85,7 +89,18 @@ export default function Users({ me }) {
 
   function openCreate(roleDefault = 'teacher') {
     setCreated(null); setErr('');
-    setCreating({ full_name: '', email: '', phone: '', role: roleDefault, password: makePassword(), student_id: '' });
+    setCreating({ full_name: '', email: '', phone: '', role: roleDefault, password: makePassword(), student_id: '', children: [] });
+  }
+
+  function pickChild(id, on) {
+    const s = (allStudents.data || []).find((x) => x.id === id);
+    const children = on ? [...creating.children, id] : creating.children.filter((x) => x !== id);
+    const first = !creating.children.length && on && s;
+    setCreating({
+      ...creating, children,
+      full_name: first && !creating.full_name ? s.guardian_name || '' : creating.full_name,
+      phone: first && !creating.phone ? s.guardian_phone || s.whatsapp || '' : creating.phone,
+    });
   }
 
   function pickStudent(id) {
@@ -105,8 +120,17 @@ export default function Users({ me }) {
     const c = creating;
     let { data, error } = await supabase.rpc('admin_create_user', {
       p_email: c.email, p_password: c.password, p_full_name: c.full_name, p_phone: c.phone || null,
-      p_role: c.role === 'assistant' ? 'teacher' : c.role, p_student_id: c.role === 'student' && c.student_id ? c.student_id : null,
+      p_role: c.role === 'assistant' || c.role === 'principal' ? 'teacher' : c.role,
+      p_student_id: c.role === 'student' && c.student_id ? c.student_id : c.role === 'parent' && c.children[0] ? c.children[0] : null,
     });
+    if (!error && c.role === 'parent' && c.children.length > 1) {
+      const { error: e4 } = await supabase.from('parent_links').insert(c.children.slice(1).map((sid) => ({ parent_id: data.id, student_id: sid, verified: true })));
+      if (e4) error = { message: `Login created, but not all children were linked: ${e4.message}` };
+    }
+    if (!error && c.role === 'principal') {
+      const { error: e5 } = await supabase.from('profiles').update({ staff_title: 'principal', permissions: PRINCIPAL_PERMS }).eq('id', data.id);
+      if (e5) error = { message: e5.message };
+    }
     if (!error && cleanUsername(c.username)) {
       const u = cleanUsername(c.username);
       const { error: e3 } = USERNAME_RULE.test(u)
@@ -183,6 +207,7 @@ export default function Users({ me }) {
         <div className="actions">
           <button className="btn" onClick={() => openCreate('teacher')}>+ Create teacher login</button>
           <button className="btn ghost" onClick={() => openCreate('student')}>+ Create student login</button>
+          <button className="btn ghost" onClick={() => openCreate('parent')}>+ Create parent login</button>
         </div>
       </div>
       <p className="muted small">
@@ -195,9 +220,13 @@ export default function Users({ me }) {
           <option value="">All roles</option>
           <option value="student">Students</option>
           <option value="teacher">Teachers</option>
+          <option value="parent">Parents</option>
           <option value="admin">Admins</option>
         </select>
       </div>
+      {(pendingLinks.data || []).length > 0 && (
+        <p className="notice-line"><b>{pendingLinks.data.length}</b> parent link request(s) to verify. Open the parent's <b>Children</b> button below (filter: Parents).</p>
+      )}
       {(err || list.error) && !creating && !resetting && <p className="error">{err || list.error}</p>}
       {saved && <p className="success">{saved}</p>}
 
@@ -215,10 +244,12 @@ export default function Users({ me }) {
                     <td className="small">{realEmail(p.email) || <span className="muted">no email</span>}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
                     <td className="small nowrap">{formatDate(p.created_at)}</td>
                     <td>
-                      <select value={p.role === 'teacher' && p.staff_title === 'assistant' ? 'assistant' : p.role} disabled={!meAdmin && (p.role === 'admin' || p.id === me.id)}
+                      <select value={p.role === 'teacher' && p.staff_title ? p.staff_title : p.role} disabled={!meAdmin && (p.role === 'admin' || p.id === me.id)}
                         onChange={(e) => changeRole(p, e.target.value)} aria-label={`Role for ${p.full_name || p.email}`}>
                         <option value="student">Student</option>
+                        <option value="parent">Parent</option>
                         <option value="teacher">Teacher</option>
+                        {(meAdmin || p.staff_title === 'principal') && <option value="principal">Principal</option>}
                         {(meAdmin || p.staff_title === 'assistant') && <option value="assistant">Admin assistant</option>}
                         {(meAdmin || p.role === 'admin') && <option value="admin">Admin</option>}
                       </select>
@@ -227,6 +258,11 @@ export default function Users({ me }) {
                       )}
                     </td>
                     <td className="nowrap">
+                      {p.role === 'parent' && (
+                        <button className="btn small ghost" onClick={() => { setErr(''); setKids(p); }}>
+                          Children{(pendingLinks.data || []).some((l) => l.parent_id === p.id) ? ' •' : ''}
+                        </button>
+                      )}{' '}
                       {meAdmin && p.role === 'teacher' && (
                         <button className="btn small ghost" onClick={() => { setErr(''); setAccess({ profile: p, picked: new Set(p.permissions || []) }); }}>Access</button>
                       )}{' '}
@@ -243,16 +279,35 @@ export default function Users({ me }) {
       )}
 
       {creating && (
-        <Modal title={creating.role === 'student' ? 'Create student login' : creating.role === 'admin' ? 'Create admin login' : creating.role === 'assistant' ? 'Create Admin assistant login' : 'Create teacher login'} onClose={() => setCreating(null)}>
+        <Modal title={{ student: 'Create student login', parent: 'Create parent login', admin: 'Create admin login', assistant: 'Create Admin assistant login', principal: 'Create Principal login' }[creating.role] || 'Create teacher login'} onClose={() => setCreating(null)}>
           <form className="form-grid" onSubmit={create}>
             <label>Login type
               <select value={creating.role} onChange={(e) => setCreating({ ...creating, role: e.target.value })}>
                 <option value="teacher">Teacher</option>
+                {meAdmin && <option value="principal">Principal</option>}
                 {meAdmin && <option value="assistant">Admin assistant</option>}
-                <option value="student">Student / parent</option>
+                <option value="student">Student</option>
+                <option value="parent">Parent</option>
                 {meAdmin && <option value="admin">Admin</option>}
               </select>
             </label>
+            {creating.role === 'principal' && (
+              <p className="span2 small notice-inline">The <b>Principal</b> reviews, approves, rejects and issues certificates, and finalizes and publishes results. Adjust later with <b>Access</b>.</p>
+            )}
+            {creating.role === 'parent' && (
+              <div className="span2 field">
+                <span className="field-label">Children of this parent ({creating.children.length}) — tick one or more</span>
+                <div className="pick-list short">
+                  {(allStudents.data || []).map((s) => (
+                    <label key={s.id} className="pick-row">
+                      <input type="checkbox" checked={creating.children.includes(s.id)} onChange={(e) => pickChild(s.id, e.target.checked)} />
+                      <span>{s.full_name} <span className="small muted">{s.student_code}{s.guardian_name ? ` · guardian ${s.guardian_name}` : ''}</span></span>
+                    </label>
+                  ))}
+                </div>
+                <span className="small muted">Links made here are verified. The parent signs in with their Parent ID (PR…) or phone.</span>
+              </div>
+            )}
             {creating.role === 'assistant' && (
               <p className="span2 small notice-inline">An <b>Admin assistant</b> can use everything except <b>Users</b> and <b>Settings</b>. You can adjust this later with the <b>Access</b> button.</p>
             )}
@@ -296,11 +351,13 @@ export default function Users({ me }) {
               <label>Staff ID<input name="staff_code" defaultValue={resetting.staff_code || ''} placeholder="TC1001" style={{ textTransform: 'uppercase' }} /></label>
             )}
             <label>User type
-              <select value={resetting.role === 'teacher' && resetting.staff_title === 'assistant' ? 'assistant' : resetting.role}
+              <select value={resetting.role === 'teacher' && resetting.staff_title ? resetting.staff_title : resetting.role}
                 disabled={!meAdmin && (resetting.role === 'admin' || resetting.id === me.id)}
                 onChange={async (e) => { await changeRole(resetting, e.target.value); setResetting(null); }}>
-                <option value="student">Student / parent</option>
+                <option value="student">Student</option>
+                <option value="parent">Parent</option>
                 <option value="teacher">Teacher</option>
+                {(meAdmin || resetting.staff_title === 'principal') && <option value="principal">Principal</option>}
                 {(meAdmin || resetting.staff_title === 'assistant') && <option value="assistant">Admin assistant</option>}
                 {(meAdmin || resetting.role === 'admin') && <option value="admin">Admin</option>}
               </select>
@@ -320,6 +377,8 @@ export default function Users({ me }) {
           </form>
         </Modal>
       )}
+
+      {kids && <ParentLinks parent={kids} students={allStudents.data || []} onClose={() => { setKids(null); pendingLinks.reload(); }} />}
 
       {access && (
         <Modal title={`Access for ${access.profile.full_name || access.profile.email}`} onClose={() => setAccess(null)}>
@@ -369,5 +428,55 @@ export default function Users({ me }) {
         </Modal>
       )}
     </section>
+  );
+}
+
+// Verify / add / remove the children of a parent login.
+function ParentLinks({ parent, students, onClose }) {
+  const [links, setLinks] = useState(null);
+  const [add, setAdd] = useState('');
+  const [err, setErr] = useState('');
+  const name = (id) => students.find((s) => s.id === id);
+  async function load() {
+    const { data, error } = await supabase.from('parent_links').select('*').eq('parent_id', parent.id).order('created_at');
+    if (error) setErr(/parent_links/.test(error.message) ? 'Parent links are not installed yet. Run update-18.sql in Supabase.' : error.message);
+    setLinks(data || []);
+  }
+  useEffect(() => { load(); }, [parent.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  async function run(p) { setErr(''); const { error } = await p; if (error) setErr(error.message); else load(); }
+  return (
+    <Modal title={`Children of ${parent.full_name || 'parent'} (${parent.staff_code || ''})`} onClose={onClose}>
+      <p className="small muted">A parent sees a child's attendance, progress, published results and issued certificates only when the link is <b>verified</b>. Check the request with the admission details before verifying.</p>
+      {err && <p className="error">{err}</p>}
+      {links === null ? <div className="spinner" /> : links.length === 0 ? <p className="muted">No children linked yet.</p> : (
+        <ul className="req-list">
+          {links.map((l) => {
+            const s = name(l.student_id);
+            return (
+              <li key={l.id} className="row-between">
+                <div>
+                  <b>{s?.full_name || 'Student'}</b> <span className="small muted">{s?.student_code}</span>
+                  <div className="small">{l.verified ? <span className="ok-text">✓ Verified {l.verified_at ? formatDate(l.verified_at) : ''}</span> : <span className="error">Waiting for verification{l.requested_by_parent ? ' (requested by parent)' : ''}</span>}
+                    {s && <span className="muted"> · guardian {s.guardian_name || '—'} {s.guardian_phone || ''} · parent phone {parent.phone || '—'}</span>}</div>
+                </div>
+                <div className="actions">
+                  {l.verified
+                    ? <button className="btn ghost small" onClick={() => run(supabase.from('parent_links').update({ verified: false }).eq('id', l.id))}>Unverify</button>
+                    : <button className="btn small" onClick={() => run(supabase.from('parent_links').update({ verified: true }).eq('id', l.id))}>Verify</button>}
+                  <button className="btn danger ghost small" onClick={() => window.confirm('Remove this link?') && run(supabase.from('parent_links').delete().eq('id', l.id))}>Remove</button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+      <div className="filters">
+        <select value={add} onChange={(e) => setAdd(e.target.value)} aria-label="Add child">
+          <option value="">Add a child…</option>
+          {students.filter((s) => !(links || []).some((l) => l.student_id === s.id)).map((s) => <option key={s.id} value={s.id}>{s.full_name} ({s.student_code})</option>)}
+        </select>
+        <button className="btn" disabled={!add} onClick={() => { run(supabase.from('parent_links').insert({ parent_id: parent.id, student_id: add, verified: true })); setAdd(''); }}>Link (verified)</button>
+      </div>
+    </Modal>
   );
 }

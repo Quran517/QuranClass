@@ -17,6 +17,7 @@ export const DEFAULT_SETTINGS = {
   class_days: [6], // weekdays the class meets (0 = Sunday … 6 = Saturday)
   backup_every_days: 7,
   allow_signup: true,
+  show_card_photos: true,
   logo_url: null,
   last_backup_at: null,
 };

@@ -149,8 +149,8 @@ export default function Progress({ profile }) {
 
 function EntryForm({ student, entry, last, hasNext, onClose, onSaved }) {
   const [f, setF] = useState(() => entry
-    ? { entry_date: entry.entry_date, kind: entry.kind, lesson: entry.lesson || '', grade: entry.grade || '', comment: entry.comment || '' }
-    : { entry_date: lastClassDay(getSettings().class_days), kind: last?.kind || 'hifz', lesson: '', grade: '', comment: '' });
+    ? { entry_date: entry.entry_date, kind: entry.kind, lesson: entry.lesson || '', grade: entry.grade || '', comment: entry.comment || '', participation: entry.participation || '', conduct: entry.conduct || '', completed: !!entry.completed }
+    : { entry_date: lastClassDay(getSettings().class_days), kind: last?.kind || 'hifz', lesson: '', grade: '', comment: '', participation: '', conduct: '', completed: false });
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -159,6 +159,10 @@ function EntryForm({ student, entry, last, hasNext, onClose, onSaved }) {
     if (!f.lesson.trim() && !f.comment.trim()) { setErr('Write the lesson or a comment.'); return; }
     setBusy(true); setErr('');
     const payload = { entry_date: f.entry_date, kind: f.kind, lesson: f.lesson.trim() || null, grade: f.grade || null, comment: f.comment.trim() || null };
+    if (f.participation) payload.participation = f.participation;
+    if (f.conduct) payload.conduct = f.conduct;
+    if (f.completed || entry?.completed) payload.completed = f.completed;
+    if (entry) { payload.participation = f.participation || null; payload.conduct = f.conduct || null; }
     const { error } = entry
       ? await supabase.from('student_progress').update(payload).eq('id', entry.id)
       : await supabase.from('student_progress').insert({ ...payload, student_id: student.id });
@@ -185,7 +189,14 @@ function EntryForm({ student, entry, last, hasNext, onClose, onSaved }) {
             ))}
           </div>
         </div>
-        <label className="span2">Teacher's comment
+        <label>Participation
+          <select value={f.participation} onChange={set('participation')}><option value="">—</option>{GRADES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        </label>
+        <label>Conduct
+          <select value={f.conduct} onChange={set('conduct')}><option value="">—</option>{GRADES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+        </label>
+        <label className="check span2"><input type="checkbox" checked={f.completed} onChange={(e) => setF({ ...f, completed: e.target.checked })} /><span>Lesson completed</span></label>
+        <label className="span2">Teacher's remarks
           <textarea rows={3} value={f.comment} onChange={set('comment')} placeholder="e.g. Good memorisation, practise the madd rules at home." />
         </label>
         {last && !entry && <p className="span2 small muted">Last time ({formatDate(last.entry_date)}): {last.lesson || '—'}{last.grade ? ` · ${GRADE_LABEL[last.grade]}` : ''}</p>}
@@ -209,7 +220,8 @@ export function ProgressList({ entries, onEdit, onDelete }) {
             <span><b>{e.lesson || KIND_LABEL[e.kind]}</b> <span className="small muted">· {KIND_LABEL[e.kind]}</span></span>
             {e.grade && <span className={`grade ${e.grade}`}>{GRADE_LABEL[e.grade]}</span>}
           </div>
-          <div className="small muted">{formatDate(e.entry_date)}{e.teacher_name ? ` · ${e.teacher_name}` : ''}</div>
+          <div className="small muted">{formatDate(e.entry_date)}{e.teacher_name ? ` · ${e.teacher_name}` : ''}{e.completed ? ' · ✓ lesson completed' : ''}</div>
+          {(e.participation || e.conduct) && <div className="small">{e.participation && <>Participation: <b>{GRADE_LABEL[e.participation]}</b></>}{e.participation && e.conduct && ' · '}{e.conduct && <>Conduct: <b>{GRADE_LABEL[e.conduct]}</b></>}</div>}
           {e.comment && <p className="comment">💬 {e.comment}</p>}
           {(onEdit || onDelete) && (
             <div className="actions small">

@@ -127,7 +127,8 @@ export default function Settings() {
       for (const [k] of FIELDS) values[k] = (f[k] ?? '').toString().trim() || null;
       values.low_attendance_pct = Number(f.low_attendance_pct) || 75;
       values.backup_every_days = Number(f.backup_every_days) || 7;
-      values.allow_signup = false; // logins are made by the admin; new students use the admission form
+      values.allow_signup = false;
+      if (s.show_card_photos !== f.show_card_photos) values.show_card_photos = f.show_card_photos !== false; // logins are made by the admin; new students use the admission form
       const cd = Array.isArray(f.class_days) ? f.class_days : [6];
       if (!cd.length) throw new Error('Tick at least one class day.');
       values.class_days = cd;
@@ -243,6 +244,10 @@ export default function Settings() {
               );
             })}
           </fieldset>
+          <label className="check span2">
+            <input type="checkbox" checked={f.show_card_photos !== false} onChange={(e) => setF({ ...f, show_card_photos: e.target.checked })} />
+            <span><b>Show photos on ID cards.</b> Photos are optional — add them under ID Cards → 📷. Untick to print all cards without a photo box.</span>
+          </label>
           <label>Low attendance warning below (%)
             <input type="number" min="1" max="100" value={f.low_attendance_pct} onChange={(e) => setF({ ...f, low_attendance_pct: e.target.value })} />
           </label>

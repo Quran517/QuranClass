@@ -19,12 +19,16 @@ import Messages from './Messages.jsx';
 import Team from './Team.jsx';
 import StaffAttendance from './StaffAttendance.jsx';
 import Progress from './Progress.jsx';
+import Exams from './Exams.jsx';
+import Certificates from './Certificates.jsx';
+import { ParentHome, StudentResultsPage } from './Family.jsx';
 import { loadSettings } from './settings.js';
 import { AREAS } from './perms.js';
 
 const TABS = {
   student: [
     ['home', 'My Page'],
+    ['results', 'Results & Certificates'],
     ['team', 'QTC Team'],
     ['account', 'Account'],
   ],
@@ -32,9 +36,16 @@ const TABS = {
     ['myclasses', 'My Classes'],
     ['attendance', 'Attendance'],
     ['progress', 'Progress'],
+    ['exams', 'Exams'],
+    ['certificates', 'Certificates'],
     ['reports', 'Reports'],
     ['idcards', 'ID Cards'],
     ['messages', 'Messages'],
+    ['team', 'QTC Team'],
+    ['account', 'Account'],
+  ],
+  parent: [
+    ['children', 'My Children'],
     ['team', 'QTC Team'],
     ['account', 'Account'],
   ],
@@ -46,6 +57,8 @@ const TABS = {
     ['users', 'Users'],
     ['attendance', 'Attendance'],
     ['progress', 'Progress'],
+    ['exams', 'Exams'],
+    ['certificates', 'Certificates'],
     ['staffatt', 'Staff Attendance'],
     ['reports', 'Reports'],
     ['idcards', 'ID Cards'],
@@ -170,6 +183,10 @@ export default function App() {
     team: <Team profile={profile} />,
     staffatt: <StaffAttendance />,
     progress: <Progress profile={profile} />,
+    exams: <Exams profile={profile} />,
+    certificates: <Certificates profile={profile} />,
+    children: <ParentHome profile={profile} />,
+    results: <StudentResultsPage profile={profile} />,
   };
 
   return (

@@ -20,6 +20,7 @@ export default function StudentHome({ profile }) {
   const [records, setRecords] = useState([]);
   const [progress, setProgress] = useState([]);
   const [showId, setShowId] = useState(false);
+  const [photo, setPhoto] = useState(null);
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
@@ -40,6 +41,8 @@ export default function StudentHome({ profile }) {
       const { data: pr } = await supabase.from('student_progress').select('*').eq('student_id', data.id)
         .order('entry_date', { ascending: false }).order('created_at', { ascending: false }).limit(200);
       setProgress(pr || []);
+      const { data: ph } = await supabase.from('card_photos').select('data').eq('student_id', data.id).maybeSingle();
+      setPhoto(ph?.data || null);
     }
   }
 
@@ -102,12 +105,12 @@ export default function StudentHome({ profile }) {
           <p className="muted small">Save this to your phone or print it. Keep it private: it marks you present.</p>
           <StudentQR student={student} />
           <h3>My ID card</h3>
-          <div className="card-preview"><PrintCards people={[studentToCard(student, klass)]} withBack /></div>
+          <div className="card-preview"><PrintCards people={[studentToCard(student, klass, photo)]} withBack /></div>
           <p className="actions" style={{ justifyContent: 'center' }}>
             <button className="btn" onClick={() => setShowId(true)}>📱 Show digital ID</button>
             <button className="btn ghost" onClick={() => printCards('a4')}>Print my ID card</button>
           </p>
-          {showId && <DigitalCard person={studentToCard(student, klass)} onClose={() => setShowId(false)} />}
+          {showId && <DigitalCard person={studentToCard(student, klass, photo)} onClose={() => setShowId(false)} />}
         </section>
       )}
 

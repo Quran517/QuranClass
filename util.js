@@ -135,3 +135,19 @@ export function classCounts(students) {
 }
 
 export const GENDER_LABEL = { any: 'Boys & Girls', male: 'Boys', female: 'Girls' };
+
+// Shrink a picture to a small ID-card photo (JPEG, 3:4, about 20–40 KB).
+export async function resizePhoto(file, w = 300, h = 400) {
+  if (!file || !/^image\//.test(file.type)) throw new Error('Please choose a photo (JPG or PNG).');
+  const img = await createImageBitmap(file);
+  const c = document.createElement('canvas');
+  c.width = w; c.height = h;
+  const r = Math.max(w / img.width, h / img.height);
+  const sw = w / r, sh = h / r;
+  c.getContext('2d').drawImage(img, (img.width - sw) / 2, (img.height - sh) / 2.4, sw, sh, 0, 0, w, h);
+  for (const q of [0.82, 0.7, 0.55]) {
+    const url = c.toDataURL('image/jpeg', q);
+    if (url.length < 150000) return url;
+  }
+  throw new Error('The photo is too large.');
+}
