@@ -1,11 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchMyClasses } from './data.js';
 import { formatDate, classTag } from './util.js';
 import { can } from './perms.js';
 import { useSettings, logoOf } from './settings.js';
 import { downloadExcel } from './exports.js';
-import { CERT_STATUS, certificatePdf, certificateValues } from './results.js';
+import { CERT_STATUS, certificatePdf, certificateValues, loadArabicFont } from './results.js';
 import { useSetup, StudentResults } from './Exams.jsx';
 import Modal from './Modal.jsx';
 
@@ -433,30 +433,53 @@ function NewRequest({ setup, onClose, onDone }) {
   );
 }
 
-// On-screen certificate with Print / PDF (only issued ones get a number).
+// On-screen certificate (English + Arabic) with Print / PDF.
+// The PDF is made from this same design, so Arabic letters join correctly.
 export function CertificateCard({ cert, student, className, setup }) {
   const settings = useSettings();
+  const ref = useRef(null);
+  const [busy, setBusy] = useState('');
+  const [err, setErr] = useState('');
+  useEffect(() => { loadArabicFont(); }, []);
   const ctx = { student, className, types: setup.types, templates: setup.templates };
-  const { t, v, body } = certificateValues(cert, ctx);
+  const { t, v, body, bodyAr } = certificateValues(cert, ctx);
+  async function pdf(print) {
+    setBusy(print ? 'print' : 'pdf'); setErr('');
+    try { await certificatePdf(cert, ctx, print); } catch (e) { setErr(e.message); }
+    setBusy('');
+  }
   return (
     <div>
-      <div className="certificate">
-        <img src={logoOf(settings)} alt="" className="cert-logo" />
-        <div className="cert-school">{settings.school_name}</div>
-        <div className="cert-title">{t.title}</div>
-        <div className="small muted">This certificate is proudly presented to</div>
-        <div className="cert-name">{v.student}</div>
-        <p className="cert-body">{body}</p>
-        <div className="cert-foot">
-          <span>{t.signature_left}</span>
-          <span className="center"><b>{cert.certificate_no || 'NOT ISSUED'}</b><br />{cert.issued_at ? formatDate(cert.issued_at) : 'Preview'}</span>
-          <span>{t.signature_right}{cert.reviewed_by_name ? <><br /><small>Approved by {cert.reviewed_by_name}</small></> : null}</span>
+      <div className="cert-wrap">
+        <div className="certificate" ref={ref}>
+          {['tl', 'tr', 'bl', 'br'].map((k) => <i key={k} className={`cert-corner ${k}`} aria-hidden="true" />)}
+          <div className="cert-bismillah" lang="ar" dir="rtl">بسم الله الرحمن الرحيم</div>
+          <div className="cert-head">
+            <img src={logoOf(settings)} alt="" className="cert-logo" crossOrigin="anonymous" />
+            <div>
+              <div className="cert-school">{settings.school_name}</div>
+              {settings.school_name_ar && <div className="cert-school ar" lang="ar" dir="rtl">{settings.school_name_ar}</div>}
+            </div>
+          </div>
+          <div className="cert-title">{t.title}</div>
+          {t.title_ar && <div className="cert-title ar" lang="ar" dir="rtl">{t.title_ar}</div>}
+          <div className="cert-presented">This certificate is proudly presented to · <span lang="ar" dir="rtl">تُمنح هذه الشهادة إلى</span></div>
+          <div className="cert-name">{v.student}</div>
+          <p className="cert-body">{body}</p>
+          {bodyAr && <p className="cert-body ar" lang="ar" dir="rtl">{bodyAr}</p>}
+          <div className="cert-seal" aria-hidden="true"><span>QTC</span><small>SLIS · JEDDAH</small></div>
+          <div className="cert-foot">
+            <span>{t.signature_left}<br /><span className="ar" lang="ar">{t.signature_left_ar || 'معلم الحلقة'}</span></span>
+            <span className="center"><b>{cert.certificate_no || 'NOT ISSUED'}</b><br />{cert.issued_at ? formatDate(cert.issued_at) : 'Preview'} · {cert.academic_year}</span>
+            <span>{t.signature_right}<br /><span className="ar" lang="ar">{t.signature_right_ar || 'المدير'}</span>{cert.reviewed_by_name ? <><br /><small>Approved by {cert.reviewed_by_name}</small></> : null}</span>
+          </div>
+          {!cert.certificate_no && <div className="cert-watermark">PREVIEW</div>}
         </div>
-        {!cert.certificate_no && <div className="cert-watermark">PREVIEW</div>}
       </div>
+      {err && <p className="error">{err}</p>}
       <div className="actions" style={{ justifyContent: 'center', marginTop: 10 }}>
-        <button className="btn ghost small" onClick={() => certificatePdf(cert, ctx, true)}>🖨 Print</button>
-        <button className="btn small" onClick={() => certificatePdf(cert, ctx)}>⬇ Download PDF</button>
+        <button className="btn ghost small" disabled={!!busy} onClick={() => pdf(true)}>{busy === 'print' ? 'Preparing…' : '🖨 Print'}</button>
+        <button className="btn small" disabled={!!busy} onClick={() => pdf(false)}>{busy === 'pdf' ? 'Preparing…' : '⬇ Download PDF'}</button>
       </div>
     </div>
   );

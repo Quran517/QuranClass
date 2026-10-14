@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchAllRows } from './data.js';
-import { useSettings, logoOf } from './settings.js';
-import { today, formatDate, classDates, classDaysLabel, nextClassDay } from './util.js';
+import { useSettings } from './settings.js';
+import { today, formatDate, classDates } from './util.js';
 import { can } from './perms.js';
 import { useActivity } from './Activity.jsx';
+import { HomeHero, Tile } from './HomeHero.jsx';
 
 const pct = (a, b) => (b ? Math.round((a / b) * 100) : 0);
 const attended = (s) => s === 'present' || s === 'late';
@@ -44,17 +45,7 @@ function TrendChart({ days, limit }) {
   );
 }
 
-const greet = () => { const h = new Date().getHours(); return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'; };
 const safe = (p) => p.then((r) => (r.error ? null : r.data)).catch(() => null);
-
-function Tile({ icon, value, label, sub, tone = 'navy', onClick, attention }) {
-  return (
-    <button className={`kpi ${tone} ${attention ? 'attention' : ''}`} onClick={onClick}>
-      <span className="kpi-icon" aria-hidden="true">{icon}</span>
-      <span className="kpi-text"><b>{value}</b><span>{label}</span>{sub && <small>{sub}</small>}</span>
-    </button>
-  );
-}
 
 export default function Dashboard({ go, profile }) {
   const settings = useSettings();
@@ -141,8 +132,6 @@ export default function Dashboard({ go, profile }) {
   if (!d) return <div className="spinner" aria-label="Loading" />;
 
   const backupDue = !settings.last_backup_at || (Date.now() - new Date(settings.last_backup_at)) / 86400000 >= settings.backup_every_days;
-  const next = nextClassDay(settings.class_days);
-  const nextLabel = next === today() ? 'Today' : new Date(next + 'T00:00:00').toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short' });
   const examsAction = d.exams ? d.exams.counts.submitted + d.exams.counts.finalized : 0;
   const certsAction = d.certs ? d.certs.counts.submitted + d.certs.counts.pending_approval : 0;
   const name = (profile?.full_name || '').split(' ')[0];
@@ -150,23 +139,13 @@ export default function Dashboard({ go, profile }) {
 
   return (
     <div className="dash">
-      <section className="dash-hero">
-        <img className="dash-hero-logo" src={logoOf(settings)} alt="" />
-        <div className="dash-hero-text">
-          <p className="dash-hello">{greet()}{name ? `, ${name}` : ''} · Assalamu Alaikum</p>
-          <h2>{settings.school_name}</h2>
-          <p className="dash-sub">{settings.academic_year} · Class every {classDaysLabel(settings.class_days)}</p>
-          <div className="dash-chips">
-            <span className="chip-light">📅 Next class: <b>{nextLabel}</b></span>
-            <span className="chip-light"><span className="dot" /> Live · {updated?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
-          </div>
-        </div>
-        <div className="dash-quick">
+      <HomeHero name={name}
+        chips={[<><span className="dot" /> Live · {updated?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</>]}
+        actions={<>
           <button className="btn" onClick={() => go('attendance')}>📷 Take attendance</button>
           {d.exams && <button className="btn light" onClick={() => go('exams')}>📝 Exams</button>}
           {d.pending > 0 && <button className="btn light" onClick={() => go('admissions')}>📥 {d.pending} new application{d.pending === 1 ? '' : 's'}</button>}
-        </div>
-      </section>
+        </>} />
 
       <div className="kpis">
         <Tile icon="🎓" tone="navy" value={d.approved} label="Enrolled students" sub={`${d.boys} boys · ${d.girls} girls`} onClick={() => go('students')} />

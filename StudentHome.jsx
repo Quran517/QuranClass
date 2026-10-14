@@ -4,6 +4,8 @@ import StudentForm from './StudentForm.jsx';
 import StudentQR from './StudentQR.jsx';
 import { PrintCards, studentToCard, printCards, DigitalCard } from './IdCards.jsx';
 import { ProgressList } from './Progress.jsx';
+import { HomeHero, Tile } from './HomeHero.jsx';
+import { classTag } from './util.js';
 import { KIND_LABEL, GRADE_LABEL } from './progress.js';
 import { formatDate, STATUS_LABELS } from './util.js';
 
@@ -14,7 +16,7 @@ const STATUS_TEXT = {
   inactive: 'Your enrolment is currently inactive. Please contact the class administration.',
 };
 
-export default function StudentHome({ profile }) {
+export default function StudentHome({ profile, go = () => {} }) {
   const [student, setStudent] = useState(undefined);
   const [klass, setKlass] = useState(null);
   const [records, setRecords] = useState([]);
@@ -81,8 +83,23 @@ export default function StudentHome({ profile }) {
   const total = records.length;
   const attended = (counts.present || 0) + (counts.late || 0);
 
+  const attPct = total ? Math.round((attended / total) * 100) : null;
   return (
-    <>
+    <div className="dash">
+      <HomeHero name={student.full_name.split(' ')[0]} title={student.full_name}
+        subtitle={`${student.student_code}${klass ? ' · ' + classTag(klass) : ''}`} photo={photo}
+        actions={student.status === 'approved' ? <>
+          <button className="btn" onClick={() => setShowId(true)}>📱 Digital ID</button>
+          <button className="btn light" onClick={() => go('results')}>🏅 Results & certificates</button>
+        </> : null} />
+      {student.status === 'approved' && (
+        <div className="kpis">
+          <Tile icon="✅" tone="green" value={attPct != null ? `${attPct}%` : '—'} label="My attendance" sub={`${attended} of ${total} classes`} />
+          <Tile icon="📖" tone="teal" value={progress.length} label="Lessons recorded" sub={progress[0] ? `latest: ${progress[0].lesson || KIND_LABEL[progress[0].kind]}` : 'none yet'} />
+          <Tile icon="⭐" tone="gold" value={progress.find((p) => p.grade) ? GRADE_LABEL[progress.find((p) => p.grade).grade] : '—'} label="Latest grade" sub="from my teacher" />
+          <Tile icon="🏫" tone="navy" value={klass?.name || '—'} label="My class" sub={klass?.schedule || ''} />
+        </div>
+      )}
       <section className="card">
         <div className="row-between">
           <h2>{student.full_name}</h2>
@@ -151,6 +168,6 @@ export default function StudentHome({ profile }) {
           )}
         </section>
       )}
-    </>
+    </div>
   );
 }

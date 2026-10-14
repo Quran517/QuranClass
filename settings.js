@@ -18,6 +18,7 @@ export const DEFAULT_SETTINGS = {
   backup_every_days: 7,
   allow_signup: true,
   show_card_photos: true,
+  school_name_ar: '',
   logo_url: null,
   last_backup_at: null,
 };

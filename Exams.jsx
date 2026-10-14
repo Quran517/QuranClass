@@ -725,13 +725,19 @@ function ExamSetup({ setup, reload }) {
       {setup.templates.map((t) => (
         <form key={t.code} className="form-grid template-form" onSubmit={(e) => {
           e.preventDefault(); const f = new FormData(e.target);
-          run(supabase.from('certificate_templates').update({ name: f.get('name'), title: f.get('title'), body: f.get('body'), signature_left: f.get('sl'), signature_right: f.get('sr'), active: f.get('active') === 'on' }).eq('code', t.code), `${t.name} template saved.`);
+          const values = { name: f.get('name'), title: f.get('title'), body: f.get('body'), signature_left: f.get('sl'), signature_right: f.get('sr'), active: f.get('active') === 'on' };
+          if ('title_ar' in t) Object.assign(values, { title_ar: f.get('title_ar') || null, body_ar: f.get('body_ar') || null, signature_left_ar: f.get('sl_ar') || 'معلم الحلقة', signature_right_ar: f.get('sr_ar') || 'المدير' });
+          run(supabase.from('certificate_templates').update(values).eq('code', t.code), `${t.name} template saved.`);
         }}>
           <label>Type name<input name="name" defaultValue={t.name} required /></label>
           <label>Title<input name="title" defaultValue={t.title} required /></label>
           <label className="span2">Text<textarea name="body" rows={3} defaultValue={t.body} required /></label>
+          {'title_ar' in t && <label className="span2">Title in Arabic<input name="title_ar" dir="rtl" lang="ar" defaultValue={t.title_ar || ''} /></label>}
+          {'title_ar' in t && <label className="span2">Text in Arabic<textarea name="body_ar" rows={3} dir="rtl" lang="ar" defaultValue={t.body_ar || ''} /></label>}
           <label>Left signature<input name="sl" defaultValue={t.signature_left} /></label>
           <label>Right signature<input name="sr" defaultValue={t.signature_right} /></label>
+          {'title_ar' in t && <label>Left signature (Arabic)<input name="sl_ar" dir="rtl" defaultValue={t.signature_left_ar || ''} /></label>}
+          {'title_ar' in t && <label>Right signature (Arabic)<input name="sr_ar" dir="rtl" defaultValue={t.signature_right_ar || ''} /></label>}
           <label className="check span2"><input type="checkbox" name="active" defaultChecked={t.active} /><span>Available for requests</span></label>
           <div className="span2"><button className="btn small">Save template</button></div>
         </form>

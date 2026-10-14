@@ -166,7 +166,7 @@ export default function App() {
   const current = tabs.some(([k]) => k === tab) ? tab : tabs[0][0];
 
   const pages = {
-    home: <StudentHome profile={profile} />,
+    home: <StudentHome profile={profile} go={setTab} />,
     dashboard: <Dashboard go={(t) => setTab(tabs.some(([k]) => k === t) ? t : current)} profile={profile} />,
     admissions: <Admissions />,
     students: <Students />,
@@ -174,7 +174,7 @@ export default function App() {
     users: <Users me={profile} />,
     attendance: <Attendance profile={profile} />,
     reports: <Reports profile={profile} />,
-    myclasses: <MyClasses profile={profile} go={setTab} />,
+    myclasses: <MyClasses profile={profile} go={(t) => setTab(tabs.some(([k]) => k === t) ? t : current)} />,
     account: <Account profile={profile} onSaved={() => loadProfile(true)} />,
     idcards: <IdCards profile={profile} />,
     activity: <Activity />,

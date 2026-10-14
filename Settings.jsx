@@ -7,6 +7,7 @@ import { downloadExcel } from './exports.js';
 
 const FIELDS = [
   ['school_name', 'School / programme name', 'text', true],
+  ['school_name_ar', 'School name in Arabic (for certificates)', 'text'],
   ['tagline', 'Tagline (shown under the name)', 'text'],
   ['academic_year', 'Academic year', 'text'],
   ['contact_phone', 'Contact phone', 'tel'],
@@ -127,6 +128,7 @@ export default function Settings() {
       for (const [k] of FIELDS) values[k] = (f[k] ?? '').toString().trim() || null;
       values.low_attendance_pct = Number(f.low_attendance_pct) || 75;
       values.backup_every_days = Number(f.backup_every_days) || 7;
+      if ((f.school_name_ar || '') === (s.school_name_ar || '')) delete values.school_name_ar; // only send when changed (needs update-20)
       values.allow_signup = false;
       if (s.show_card_photos !== f.show_card_photos) values.show_card_photos = f.show_card_photos !== false; // logins are made by the admin; new students use the admission form
       const cd = Array.isArray(f.class_days) ? f.class_days : [6];

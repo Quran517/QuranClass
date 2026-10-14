@@ -7,6 +7,7 @@ import { CertificateCard } from './Certificates.jsx';
 import { ProgressList } from './Progress.jsx';
 import { studentToCard, DigitalCard } from './IdCards.jsx';
 import Modal from './Modal.jsx';
+import { HomeHero } from './HomeHero.jsx';
 
 const SCORE = { excellent: 5, very_good: 4, good: 3, fair: 2, needs_work: 1 };
 
@@ -219,7 +220,10 @@ export function ParentHome({ profile }) {
   const child = kids.find((k) => k.student_id === pick)?.students;
 
   return (
-    <>
+    <div className="dash">
+      <HomeHero name={(profile.full_name || '').split(' ')[0]} title="My children"
+        subtitle={kids.length ? `${kids.length} child${kids.length === 1 ? '' : 'ren'} linked · Parent ID ${profile.staff_code || ''}` : `Parent ID ${profile.staff_code || ''}`}
+        chips={kids.map((k) => `🎓 ${k.students.full_name}`)} />
       <section className="card">
         <div className="row-between">
           <h2>My children</h2>
@@ -251,6 +255,6 @@ export function ParentHome({ profile }) {
         </form>
         {msg && <p className="success">{msg}</p>}
       </section>
-    </>
+    </div>
   );
 }
