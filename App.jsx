@@ -167,7 +167,7 @@ export default function App() {
 
   const pages = {
     home: <StudentHome profile={profile} />,
-    dashboard: <Dashboard go={setTab} />,
+    dashboard: <Dashboard go={(t) => setTab(tabs.some(([k]) => k === t) ? t : current)} profile={profile} />,
     admissions: <Admissions />,
     students: <Students />,
     classes: <Classes />,

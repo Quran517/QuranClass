@@ -151,3 +151,14 @@ export async function resizePhoto(file, w = 300, h = 400) {
   }
   throw new Error('The photo is too large.');
 }
+
+// Today if it is a class day, otherwise the next class day.
+export function nextClassDay(days) {
+  const set = Array.isArray(days) && days.length ? days.map(Number) : [6];
+  const d = new Date();
+  for (let i = 0; i < 8; i++) {
+    if (set.includes(d.getDay())) return d.toLocaleDateString('en-CA');
+    d.setDate(d.getDate() + 1);
+  }
+  return today();
+}

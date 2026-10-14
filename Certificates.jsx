@@ -40,7 +40,7 @@ export default function Certificates({ profile }) {
       </div>
       {view === 'request' && <RequestView setup={setup} classes={classes} />}
       {view === 'review' && principal && <ReviewView setup={setup} />}
-      {view === 'track' && <TrackView setup={setup} classes={classes} />}
+      {view === 'track' && <TrackView setup={setup} classes={classes} profile={profile} canRequest={canRequest} />}
     </>
   );
 }
@@ -122,6 +122,13 @@ function RequestView({ setup, classes }) {
                   <td className="nowrap">
                     {reqs.filter((r) => ['draft', 'rejected'].includes(r.status)).map((r) => (
                       <button key={r.id} className="btn small" onClick={() => setEditing({ s, req: r, elig })}>{r.status === 'rejected' ? 'Correct & resubmit' : 'Open draft'}</button>
+                    ))}
+                    {reqs.filter((r) => ['submitted', 'pending_approval'].includes(r.status)).map((r) => (
+                      <button key={r.id} className="btn danger ghost small" onClick={async () => {
+                        if (!window.confirm(`Withdraw the request for ${s.full_name}?`)) return;
+                        const { error } = await supabase.rpc('cert_delete', { p_id: r.id });
+                        if (error) setErr(error.message); else { setMsg('Request withdrawn.'); load(); }
+                      }}>Withdraw</button>
                     ))}
                     {elig.eligible && <button className="btn ghost small" onClick={() => setEditing({ s, req: null, elig })}>+ Request</button>}
                   </td>
@@ -205,6 +212,13 @@ function ReviewView({ setup }) {
     load();
   }
 
+  async function remove(r) {
+    if (!window.confirm(`Delete the certificate request for ${r.students?.full_name}? The teacher will be notified.`)) return;
+    setErr(''); setMsg('');
+    const { error } = await supabase.rpc('cert_delete', { p_id: r.id });
+    if (error) setErr(error.message); else { setMsg('Request deleted.'); load(); }
+  }
+
   const waiting = (rows || []).filter((r) => r.status !== 'approved');
   const approved = (rows || []).filter((r) => r.status === 'approved');
   const tname = (c) => setup.templates.find((t) => t.code === c)?.title || c;
@@ -227,7 +241,7 @@ function ReviewView({ setup }) {
                     {r.teacher_note && <div className="small muted">💬 {r.teacher_note}</div>}
                     {r.rejection_reason && <div className="small muted">Earlier rejected: {r.rejection_reason}</div>}
                   </div>
-                  <div className="actions"><CertBadge status={r.status} /><button className="btn small" onClick={() => setOpen(r)}>Review</button></div>
+                  <div className="actions"><CertBadge status={r.status} /><button className="btn small" onClick={() => setOpen(r)}>Review</button><button className="btn danger ghost small" onClick={() => remove(r)}>Delete</button></div>
                 </li>
               ))}
             </ul>
@@ -241,7 +255,7 @@ function ReviewView({ setup }) {
               {approved.map((r) => (
                 <li key={r.id} className="row-between">
                   <div><b>{r.students?.full_name}</b> <span className="small muted">{tname(r.certificate_type)} · {r.academic_year} · approved {formatDate(r.reviewed_at)}</span></div>
-                  <button className="btn small" disabled={busy} onClick={() => issue([r])}>Issue</button>
+                  <div className="actions"><button className="btn small" disabled={busy} onClick={() => issue([r])}>Issue</button><button className="btn danger ghost small" onClick={() => remove(r)}>Delete</button></div>
                 </li>
               ))}
             </ul>
@@ -291,11 +305,22 @@ function ReviewModal({ req, setup, onClose, onDone }) {
 }
 
 // ---------------------------------------------------------------------
-function TrackView({ setup, classes }) {
+function TrackView({ setup, classes, profile, canRequest }) {
   const [f, setF] = useState({ year: setup.currentYear, status: '', class_id: '' });
   const [rows, setRows] = useState(null);
   const [err, setErr] = useState('');
   const [view, setView] = useState(null);
+  const [adding, setAdding] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [tick, setTick] = useState(0);
+  const isAdmin = profile.role === 'admin';
+  async function remove(r) {
+    const issued = r.status === 'issued';
+    if (!window.confirm(issued ? `Cancel issued certificate ${r.certificate_no} for ${r.students?.full_name}? It will disappear from the student and parent pages. This cannot be undone.` : `Delete the request for ${r.students?.full_name}?`)) return;
+    setErr(''); setMsg('');
+    const { error } = await supabase.rpc('cert_delete', { p_id: r.id });
+    if (error) setErr(/only|Only/.test(error.message) ? error.message : error.message); else { setMsg(issued ? 'Certificate cancelled.' : 'Request deleted.'); setTick(tick + 1); }
+  }
   useEffect(() => {
     (async () => {
       setRows(null);
@@ -307,13 +332,15 @@ function TrackView({ setup, classes }) {
       if (error) setErr(error.message);
       setRows(data || []);
     })();
-  }, [f]);
+  }, [f, tick]);
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
   const tname = (c) => setup.templates.find((t) => t.code === c)?.name || c;
   return (
     <section className="card">
       <div className="row-between">
         <h2>All certificate requests</h2>
+        <div className="actions">
+        {canRequest && <button className="btn small" onClick={() => setAdding(true)}>+ New request (one student)</button>}
         {rows?.length > 0 && <button className="btn ghost small" onClick={() => downloadExcel(`certificates-${f.year || 'all'}.xlsx`, [{
           name: 'Certificates', rows: rows.map((r) => ({
             Student: r.students?.full_name, 'Student ID': r.students?.student_code, Class: r.classes?.name, Year: r.academic_year, Type: tname(r.certificate_type),
@@ -322,6 +349,7 @@ function TrackView({ setup, classes }) {
             'Certificate No': r.certificate_no || '', Issued: r.issued_at ? formatDate(r.issued_at) : '',
           })),
         }])}>Download Excel</button>}
+        </div>
       </div>
       <div className="filters">
         <select value={f.year} onChange={set('year')} aria-label="Academic year"><option value="">All years</option>{setup.years.map((y) => <option key={y.name} value={y.name}>{y.name}</option>)}</select>
@@ -329,6 +357,7 @@ function TrackView({ setup, classes }) {
         <select value={f.status} onChange={set('status')} aria-label="Status"><option value="">Any status</option>{Object.entries(CERT_STATUS).map(([k, [l]]) => <option key={k} value={k}>{l}</option>)}</select>
       </div>
       {err && <p className="error">{err}</p>}
+      {msg && <p className="success">{msg}</p>}
       {rows === null ? <div className="spinner" /> : rows.length === 0 ? <p className="muted">No certificate requests.</p> : (
         <div className="table-wrap">
           <table>
@@ -340,19 +369,67 @@ function TrackView({ setup, classes }) {
                   <td className="small">{tname(r.certificate_type)} · {r.academic_year}{r.certificate_no && <div><b>{r.certificate_no}</b></div>}</td>
                   <td><CertBadge status={r.status} />{r.status === 'rejected' && <div className="small error">{r.rejection_reason}</div>}</td>
                   <td className="small hide-sm">{r.reviewed_by_name ? `${r.reviewed_by_name} · ${formatDate(r.reviewed_at)}` : '—'}</td>
-                  <td>{['approved', 'issued'].includes(r.status) && <button className="btn ghost small" onClick={() => setView(r)}>View</button>}</td>
+                  <td className="nowrap">
+                    {['approved', 'issued'].includes(r.status) && <button className="btn ghost small" onClick={() => setView(r)}>View</button>}{' '}
+                    {(r.status !== 'issued' || isAdmin) && (r.status !== 'approved' || can(profile, 'certificates')) && (r.requested_by === profile.id || can(profile, 'certificates') || can(profile, 'exams') || isAdmin) && (
+                      <button className="btn danger ghost small" onClick={() => remove(r)}>{r.status === 'issued' ? 'Cancel' : 'Delete'}</button>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {adding && <NewRequest setup={setup} onClose={() => setAdding(false)} onDone={(m) => { setAdding(false); setMsg(m); setTick(tick + 1); }} />}
       {view && (
         <Modal title={view.certificate_no || 'Certificate preview'} onClose={() => setView(null)}>
           <CertificateCard cert={view} student={view.students} className={view.classes?.name} setup={setup} />
         </Modal>
       )}
     </section>
+  );
+}
+
+// Request a certificate for one student (any class you can see).
+function NewRequest({ setup, onClose, onDone }) {
+  const certTypes = setup.types.filter((t) => t.allow_certificate);
+  const templates = setup.templates.filter((t) => t.active);
+  const [students, setStudents] = useState(null);
+  const [q, setQ] = useState('');
+  const [s, setS] = useState(null);
+  const [year, setYear] = useState(setup.currentYear);
+  const [type, setType] = useState(certTypes[0]?.code || '');
+  const [elig, setElig] = useState(null);
+  useEffect(() => {
+    supabase.from('students').select('id, full_name, student_code, class_id').eq('status', 'approved').order('full_name').then(({ data }) => setStudents(data || []));
+  }, []);
+  useEffect(() => {
+    setElig(null);
+    if (s && type) supabase.rpc('certificate_eligibility', { p_student: s.id, p_year: year, p_type: type }).then(({ data }) => setElig(data || { eligible: false, reason: '—' }));
+  }, [s, year, type]);
+  if (!certTypes.length) return <Modal title="New certificate request" onClose={onClose}><p className="muted">No exam type gives certificates. Switch it on in Exams → Exam setup.</p></Modal>;
+  if (s && elig) return <RequestForm s={s} req={null} elig={elig} year={year} examType={type} templates={templates} onClose={() => setS(null)} onDone={onDone} />;
+  const list = (students || []).filter((x) => !q || `${x.full_name} ${x.student_code}`.toLowerCase().includes(q.toLowerCase())).slice(0, 40);
+  return (
+    <Modal title="New certificate request" onClose={onClose}>
+      <div className="form-grid">
+        <label>Academic year<select value={year} onChange={(e) => setYear(e.target.value)}>{setup.years.map((y) => <option key={y.name} value={y.name}>{y.name}</option>)}</select></label>
+        <label>Exam<select value={type} onChange={(e) => setType(e.target.value)}>{certTypes.map((t) => <option key={t.code} value={t.code}>{t.name}</option>)}</select></label>
+        <label className="span2">Find the student<input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Name or Student ID" /></label>
+      </div>
+      {students === null ? <div className="spinner" /> : (
+        <div className="pick-list short">
+          {list.map((x) => (
+            <button key={x.id} type="button" className="pick-row as-button" onClick={() => setS(x)}>
+              <span>{x.full_name} <span className="small muted">{x.student_code}</span></span><span className="small">Choose →</span>
+            </button>
+          ))}
+          {list.length === 0 && <p className="small muted" style={{ padding: 10 }}>No matching students.</p>}
+        </div>
+      )}
+      {s && !elig && <div className="spinner" />}
+    </Modal>
   );
 }
 

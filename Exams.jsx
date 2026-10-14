@@ -63,7 +63,7 @@ function ExamList({ profile, setup, classes }) {
 
   async function load() {
     setErr('');
-    let q = supabase.from('exams').select('*').order('exam_date', { ascending: false });
+    let q = supabase.from('exams').select('*, exam_marks(count)').order('exam_date', { ascending: false });
     if (f.year) q = q.eq('academic_year', f.year);
     if (f.class_id) q = q.eq('class_id', f.class_id);
     if (f.subject_id) q = q.eq('subject_id', f.subject_id);
@@ -90,7 +90,12 @@ function ExamList({ profile, setup, classes }) {
     <section className="card">
       <div className="row-between">
         <h2>Exams</h2>
-        {canCreate && <button className="btn" onClick={() => setEditing({})}>+ New exam</button>}
+        {canCreate && (
+          <div className="actions">
+            <button className="btn ghost" onClick={() => setEditing({ individual: true })}>+ Individual exam</button>
+            <button className="btn" onClick={() => setEditing({})}>+ New class exam</button>
+          </div>
+        )}
       </div>
       <p className="small muted">Teacher creates the exam → enters marks → <b>Submit</b>. The results manager <b>Finalizes</b> and <b>Publishes</b>. Students and parents see results only after publishing.</p>
       <div className="filters">
@@ -127,7 +132,7 @@ function ExamList({ profile, setup, classes }) {
             <tbody>
               {rows.map((e) => (
                 <tr key={e.id} className="clickable-row" onClick={() => setOpenId(e.id)}>
-                  <td><button className="link">{e.title}</button><div className="small muted">{typ(e.exam_type)}{e.term ? ` · ${e.term}` : ''} · {e.academic_year}</div></td>
+                  <td><button className="link">{e.title}</button>{e.exam_marks?.[0]?.count === 1 && <span className="badge inactive">Individual</span>}<div className="small muted">{typ(e.exam_type)}{e.term ? ` · ${e.term}` : ''} · {e.academic_year} · {e.exam_marks?.[0]?.count ?? 0} student{e.exam_marks?.[0]?.count === 1 ? '' : 's'}</div></td>
                   <td className="small">{cls(e.class_id)?.name || '—'}</td>
                   <td className="small hide-sm">{subj(e.subject_id)}</td>
                   <td className="small hide-sm nowrap">{formatDate(e.exam_date)}</td>
@@ -156,6 +161,8 @@ function ExamForm({ exam, setup, classes, onClose, onSaved }) {
   });
   const [students, setStudents] = useState([]);
   const [picked, setPicked] = useState({});
+  const [who, setWho] = useState(exam.individual ? 'one' : 'class');
+  const [find, setFind] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState('');
   const set = (k) => (e) => setF({ ...f, [k]: e.target.value });
@@ -163,8 +170,13 @@ function ExamForm({ exam, setup, classes, onClose, onSaved }) {
   useEffect(() => {
     if (!isNew || !f.class_id) return;
     supabase.from('students').select('id, full_name, student_code').eq('class_id', f.class_id).eq('status', 'approved').order('full_name')
-      .then(({ data }) => { setStudents(data || []); setPicked(Object.fromEntries((data || []).map((s) => [s.id, true]))); });
-  }, [f.class_id, isNew]);
+      .then(({ data }) => { setStudents(data || []); setPicked(who === 'one' ? {} : Object.fromEntries((data || []).map((s) => [s.id, true]))); });
+  }, [f.class_id, isNew]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function switchWho(w) {
+    setWho(w);
+    setPicked(w === 'one' ? {} : Object.fromEntries(students.map((s) => [s.id, true])));
+  }
 
   async function save(e) {
     e.preventDefault();
@@ -192,7 +204,7 @@ function ExamForm({ exam, setup, classes, onClose, onSaved }) {
 
   const termHint = setup.types.find((t) => t.code === f.exam_type)?.is_final ? 'e.g. Final' : 'e.g. October, Quarter 1';
   return (
-    <Modal title={isNew ? 'New exam' : `Edit ${exam.title}`} onClose={onClose}>
+    <Modal title={isNew ? (exam.individual ? 'New individual exam' : 'New class exam') : `Edit ${exam.title}`} onClose={onClose}>
       <form className="form-grid" onSubmit={save}>
         <label className="span2">Exam title *<input required value={f.title} onChange={set('title')} placeholder="e.g. Hifz – Juz 30 test" /></label>
         <label>Exam type *
@@ -217,12 +229,19 @@ function ExamForm({ exam, setup, classes, onClose, onSaved }) {
         <label>Pass marks *<input type="number" min="0" max="1000" step="0.5" required value={f.pass_marks} onChange={set('pass_marks')} /></label>
         {isNew && (
           <div className="span2 field">
-            <span className="field-label">Students taking this exam ({Object.values(picked).filter(Boolean).length} of {students.length})</span>
+            <div className="row-between">
+              <span className="field-label">Students taking this exam ({Object.values(picked).filter(Boolean).length} of {students.length})</span>
+              <div className="segmented" role="group" aria-label="Who takes the exam">
+                <button type="button" className={who === 'class' ? 'active' : ''} onClick={() => switchWho('class')}>Whole class</button>
+                <button type="button" className={who === 'one' ? 'active' : ''} onClick={() => switchWho('one')}>Individual student</button>
+              </div>
+            </div>
+            {who === 'one' && <input className="find-student" value={find} onChange={(e) => setFind(e.target.value)} placeholder="Search the student's name or ID, then tick" aria-label="Search student" />}
             {students.length === 0 ? <p className="small muted">No enrolled students in this class.</p> : (
               <div className="pick-list">
-                <label className="pick-all small"><input type="checkbox" checked={students.every((s) => picked[s.id])}
-                  onChange={(e) => setPicked(Object.fromEntries(students.map((s) => [s.id, e.target.checked])))} /> All students</label>
-                {students.map((s) => (
+                {who === 'class' && <label className="pick-all small"><input type="checkbox" checked={students.every((s) => picked[s.id])}
+                  onChange={(e) => setPicked(Object.fromEntries(students.map((s) => [s.id, e.target.checked])))} /> All students</label>}
+                {students.filter((s) => who === 'class' || !find || `${s.full_name} ${s.student_code}`.toLowerCase().includes(find.toLowerCase())).map((s) => (
                   <label key={s.id} className="pick-row"><input type="checkbox" checked={!!picked[s.id]} onChange={(e) => setPicked({ ...picked, [s.id]: e.target.checked })} />
                     <span>{s.full_name} <span className="small muted">{s.student_code}</span></span></label>
                 ))}
