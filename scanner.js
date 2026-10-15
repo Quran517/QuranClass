@@ -36,8 +36,8 @@ export function normalizeScan(raw) {
   return s.replace(/\s+/g, '');
 }
 
-const FAST = 45;        // ms between keys: faster than any person types
-const MIN_LEN = 3;
+const FAST = 60;        // ms between keys: faster than any person types (scanners: 2–40 ms)
+const MIN_LEN = 4;
 
 export function useHardwareScanner(onScan, { enabled = true } = {}) {
   const cb = useRef(onScan);
@@ -72,16 +72,34 @@ export function useHardwareScanner(onScan, { enabled = true } = {}) {
       }
       const ch = CODE_CHARS[e.code];
       if (!ch) return;
-      if (times.length && now - times[times.length - 1] > 120) reset();
+      if (times.length && now - times[times.length - 1] > 250) reset();
       if (!buf) startEl = t;
       buf += e.shiftKey ? ch[1] : ch[0];
       times.push(now);
       clearTimeout(timer);
       // scanners set up without an Enter key: finish after a short pause
-      timer = setTimeout(() => { if (buf.length >= 6) fire(null); else reset(); }, 160);
+      timer = setTimeout(() => { if (buf.length >= 5) fire(null); else reset(); }, 260);
     };
     window.addEventListener('keydown', down, true);
     return () => { window.removeEventListener('keydown', down, true); clearTimeout(timer); };
   }, [enabled]);
   return last;
+}
+
+// For the "Scanner test" panel: shows every key the computer receives, and how fast.
+export function useKeyLog(enabled) {
+  const [log, setLog] = useState([]);
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let prev = 0;
+    const down = (e) => {
+      const now = performance.now();
+      const gap = prev ? Math.round(now - prev) : 0;
+      prev = now;
+      setLog((l) => [...l.slice(-59), { key: e.key, code: e.code, gap, shift: e.shiftKey }]);
+    };
+    window.addEventListener('keydown', down, true);
+    return () => window.removeEventListener('keydown', down, true);
+  }, [enabled]);
+  return [log, () => setLog([])];
 }

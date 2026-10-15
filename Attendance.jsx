@@ -6,7 +6,7 @@ import { getSettings, useSettings } from './settings.js';
 import QrScanner from './QrScanner.jsx';
 import { QR_PREFIX } from './StudentQR.jsx';
 import { unlockSound, scanSound, scanVibrate } from './sound.js';
-import { useHardwareScanner, normalizeScan } from './scanner.js';
+import { useHardwareScanner, normalizeScan, useKeyLog } from './scanner.js';
 
 const STATUSES = ['present', 'late', 'absent', 'excused'];
 const AUTO = 'auto'; // scan any card: class & group found automatically
@@ -165,6 +165,8 @@ export default function Attendance({ profile }) {
     await onScan(v);
   }
 
+  const [test, setTest] = useState(false);
+  const [keyLog, clearLog] = useKeyLog(test);
   const lastHw = useHardwareScanner((v) => { unlockSound(); setTypedId(''); onScan(v); }, { enabled: !!classId });
   if (classes.loading) return <div className="spinner" />;
   if (!classes.data?.length) {
@@ -201,7 +203,11 @@ export default function Attendance({ profile }) {
         {!isClassDay(date, settings.class_days) && <p className="notice-line small">⚠ {formatDate(date)} is not a class day (class is on {classDaysLabel(settings.class_days)}). <button className="link" onClick={() => setDate(lastClassDay(settings.class_days))}>Go to last class — {formatDate(lastClassDay(settings.class_days))}</button></p>}
         {auto ? <p className="small muted">Automatic mode: each scanned student is marked present in <b>their own class and group</b>.</p> : klass?.schedule && <p className="small muted">{klass.schedule}</p>}
 
-        <p className="small scanner-ready"><span className="dot" /> USB / Bluetooth scanner ready — just scan a card (any keyboard language).{lastHw ? ` Last scan ${new Date(lastHw.at).toLocaleTimeString('en-GB')}.` : ''}</p>
+        <div className="scanner-row">
+          <p className="small scanner-ready"><span className="dot" /> USB / Bluetooth scanner ready — just scan a card's barcode (any keyboard language).{lastHw ? ` Last scan: ${lastHw.value} at ${new Date(lastHw.at).toLocaleTimeString('en-GB')}.` : ''}</p>
+          <button type="button" className="btn ghost small" onClick={() => { setTest(!test); clearLog(); }}>{test ? 'Close test' : '🔧 Scanner test'}</button>
+        </div>
+        {test && <ScannerTest log={keyLog} last={lastHw} />}
         <form className="filters typed-id" onSubmit={typed}>
           <input data-scan="" value={typedId} onChange={(e) => setTypedId(e.target.value)} autoComplete="off" autoCapitalize="characters"
             placeholder="Type or scan ID (e.g. QC1070) and press Enter" aria-label="Student ID" />
@@ -313,5 +319,36 @@ export default function Attendance({ profile }) {
       </section>
       )}
     </>
+  );
+}
+
+// Shows what the scanner sends, to find set-up problems quickly.
+function ScannerTest({ log, last }) {
+  const keys = log.filter((k) => k.key !== 'Shift');
+  const text = keys.filter((k) => k.key.length === 1).map((k) => k.key).join('');
+  const gaps = keys.slice(1).map((k) => k.gap).filter((g) => g > 0 && g < 1000);
+  const avg = gaps.length ? Math.round(gaps.reduce((a, b) => a + b, 0) / gaps.length) : null;
+  const enter = keys.some((k) => k.key === 'Enter');
+  return (
+    <div className="scanner-test">
+      <p className="small"><b>Scan a printed card now.</b> Below you see exactly what the computer receives from the scanner.</p>
+      {keys.length === 0 ? <p className="error small">Nothing received yet. If you scanned and nothing appears: the scanner is not in <b>USB keyboard (HID)</b> mode — see the steps below.</p> : (
+        <dl className="details small">
+          <dt>Received</dt><dd><code>{text || '—'}</code></dd>
+          <dt>Speed</dt><dd>{avg != null ? `${avg} ms per character ${avg <= 60 ? '✓ scanner speed' : '— slower than a scanner (typed by hand?)'}` : '—'}</dd>
+          <dt>Enter at the end</dt><dd>{enter ? '✓ yes' : 'no (that is fine)'}</dd>
+          <dt>Read as</dt><dd>{last ? <b>{last.value}</b> : <span className="muted">not recognised as a scan yet</span>}</dd>
+        </dl>
+      )}
+      <details className="small">
+        <summary>Scanner set-up tips (Symbol / Zebra LS2208 and similar)</summary>
+        <ol>
+          <li>Scan the <b>barcode</b> (black lines) on a <b>printed</b> card. Laser scanners cannot read phone or computer screens, and cannot read the square QR code.</li>
+          <li>Open Notepad and scan: you should see <code>QC1001</code>. If nothing appears, scan the <b>"USB Keyboard (HID)"</b> set-up barcode in the scanner's quick-start guide, then unplug and plug it in again.</li>
+          <li>If Notepad shows strange letters, scan the <b>"North American / US English keyboard"</b> set-up barcode in the guide.</li>
+          <li>Optional: scan the <b>"Add Enter key (CR suffix)"</b> set-up barcode so every scan ends with Enter.</li>
+        </ol>
+      </details>
+    </div>
   );
 }

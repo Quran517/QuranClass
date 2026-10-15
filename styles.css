@@ -788,3 +788,7 @@ tbody tr:hover td { background: #f8fafe; }
 .auth-main .card { border: 0; }
 .auth-main .card h2 { font-size: 1.25rem; }
 .scanner-ready { display: flex; align-items: center; gap: 8px; color: var(--green); font-weight: 600; margin: 4px 0 8px; }
+.scanner-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.scanner-test { border: 1px dashed #b9c6dc; background: #f7f9fd; border-radius: 12px; padding: 12px 14px; margin: 6px 0 12px; }
+.scanner-test ol { margin: 6px 0 0 18px; padding: 0; }
+.scanner-test li { margin: 3px 0; }
