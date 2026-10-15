@@ -6,6 +6,7 @@ import { getSettings, useSettings } from './settings.js';
 import QrScanner from './QrScanner.jsx';
 import { QR_PREFIX } from './StudentQR.jsx';
 import { unlockSound, scanSound, scanVibrate } from './sound.js';
+import { useHardwareScanner, normalizeScan } from './scanner.js';
 
 const STATUSES = ['present', 'late', 'absent', 'excused'];
 const AUTO = 'auto'; // scan any card: class & group found automatically
@@ -159,11 +160,12 @@ export default function Attendance({ profile }) {
   async function typed(e) {
     e.preventDefault();
     unlockSound();
-    const v = typedId;
+    const v = normalizeScan(typedId);
     setTypedId('');
     await onScan(v);
   }
 
+  const lastHw = useHardwareScanner((v) => { unlockSound(); setTypedId(''); onScan(v); }, { enabled: !!classId });
   if (classes.loading) return <div className="spinner" />;
   if (!classes.data?.length) {
     return (
@@ -199,8 +201,9 @@ export default function Attendance({ profile }) {
         {!isClassDay(date, settings.class_days) && <p className="notice-line small">⚠ {formatDate(date)} is not a class day (class is on {classDaysLabel(settings.class_days)}). <button className="link" onClick={() => setDate(lastClassDay(settings.class_days))}>Go to last class — {formatDate(lastClassDay(settings.class_days))}</button></p>}
         {auto ? <p className="small muted">Automatic mode: each scanned student is marked present in <b>their own class and group</b>.</p> : klass?.schedule && <p className="small muted">{klass.schedule}</p>}
 
+        <p className="small scanner-ready"><span className="dot" /> USB / Bluetooth scanner ready — just scan a card (any keyboard language).{lastHw ? ` Last scan ${new Date(lastHw.at).toLocaleTimeString('en-GB')}.` : ''}</p>
         <form className="filters typed-id" onSubmit={typed}>
-          <input value={typedId} onChange={(e) => setTypedId(e.target.value)} autoComplete="off" autoCapitalize="characters"
+          <input data-scan="" value={typedId} onChange={(e) => setTypedId(e.target.value)} autoComplete="off" autoCapitalize="characters"
             placeholder="Type or scan ID (e.g. QC1070) and press Enter" aria-label="Student ID" />
           <button className="btn ghost" disabled={!typedId.trim()}>Mark present</button>
         </form>

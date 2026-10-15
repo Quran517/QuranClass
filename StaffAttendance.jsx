@@ -7,6 +7,7 @@ import { downloadExcel } from './exports.js';
 import { roleLabel } from './perms.js';
 import { unlockSound, scanSound, scanVibrate } from './sound.js';
 import QrScanner from './QrScanner.jsx';
+import { useHardwareScanner, normalizeScan } from './scanner.js';
 
 const STATUSES = [['present', 'Present'], ['late', 'Late'], ['absent', 'Absent'], ['leave', 'Leave']];
 const time = (ts) => (ts ? new Date(ts).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) : '');
@@ -103,6 +104,8 @@ export default function StaffAttendance() {
     }
   }
 
+  useHardwareScanner((v) => { unlockSound(); setTyped(''); onScan(v); });
+
   const count = (s) => staff.filter((p) => rows[p.id]?.status === s).length;
 
   return (
@@ -114,8 +117,9 @@ export default function StaffAttendance() {
           <button className={scanning ? 'btn danger' : 'btn'} onClick={() => { unlockSound(); setScanning(!scanning); }}>{scanning ? 'Stop scanner' : 'Scan staff cards'}</button>
         </div>
         {!isClassDay(date, settings.class_days) && <p className="notice-line small">⚠ {formatDate(date)} is not a class day (class is on {classDaysLabel(settings.class_days)}). <button className="link" onClick={() => setDate(lastClassDay(settings.class_days))}>Go to last class — {formatDate(lastClassDay(settings.class_days))}</button></p>}
-        <form className="filters typed-id" onSubmit={(e) => { e.preventDefault(); unlockSound(); onScan(typed); setTyped(''); }}>
-          <input value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type or scan teacher ID (e.g. TC1002) and press Enter" aria-label="Staff ID" />
+        <p className="small scanner-ready"><span className="dot" /> USB / Bluetooth scanner ready — scan a staff card (any keyboard language).</p>
+        <form className="filters typed-id" onSubmit={(e) => { e.preventDefault(); unlockSound(); onScan(normalizeScan(typed)); setTyped(''); }}>
+          <input data-scan="" value={typed} onChange={(e) => setTyped(e.target.value)} placeholder="Type or scan teacher ID (e.g. TC1002) and press Enter" aria-label="Staff ID" />
           <button className="btn ghost" disabled={!typed.trim()}>Mark present</button>
         </form>
         {(scanning || feed.length > 0) && (
