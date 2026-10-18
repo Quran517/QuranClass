@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { fetchAllRows } from './data.js';
 import { useSettings, saveSettings, setLastBackup, logoOf } from './settings.js';
@@ -261,6 +261,7 @@ export default function Settings() {
       </section>
 
       <LogoSettings />
+      <StudentIdSettings />
 
       <section className="card">
         <h2>Backups</h2>
@@ -294,5 +295,65 @@ export default function Settings() {
         )}
       </section>
     </>
+  );
+}
+
+// Student IDs: show gaps and renumber everyone QC1001, QC1002, … (admin only).
+function StudentIdSettings() {
+  const [rows, setRows] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const [done, setDone] = useState(null);
+
+  async function load() {
+    try {
+      setRows(await fetchAllRows(() => supabase.from('students').select('id, full_name, student_code, created_at').order('created_at').order('id')));
+    } catch (e) { setErr(e.message); setRows([]); }
+  }
+  useEffect(() => { load(); }, []);
+
+  const nums = (rows || []).map((r) => Number((r.student_code || '').replace(/^QC/, ''))).filter((n) => !Number.isNaN(n));
+  const max = nums.length ? Math.max(...nums) : 1000;
+  const gaps = nums.length ? max - 1000 - nums.length : 0;
+  const outOfOrder = (rows || []).some((r, i) => r.student_code !== `QC${1001 + i}`);
+
+  async function renumber() {
+    if (!window.confirm(`Give all ${rows.length} students new IDs QC1001 to QC${1000 + rows.length}, in the order they joined?\n\nAttendance, marks, progress, certificates and logins stay linked.\nPrinted cards show the OLD ID: print new cards and collect the old ones. Students sign in with their new ID.`)) return;
+    if (!window.confirm('Are you sure? This cannot be undone automatically (a list of old and new IDs will be downloaded).')) return;
+    setBusy(true); setErr(''); setDone(null);
+    const { data, error } = await supabase.rpc('renumber_student_codes');
+    setBusy(false);
+    if (error) { setErr(/renumber_student_codes/.test(error.message) ? 'Run update-23.sql in Supabase → SQL Editor first.' : error.message); return; }
+    setDone(data);
+    if (data.changed?.length) {
+      downloadExcel(`student-id-changes-${new Date().toLocaleDateString('en-CA')}.xlsx`, [{
+        name: 'Old and new IDs', rows: data.changed.map((c) => ({ Student: c.name, 'Old ID': c.old, 'New ID': c.new })),
+      }]);
+    }
+    load();
+  }
+
+  return (
+    <section className="card">
+      <h2>Student IDs</h2>
+      <p className="small muted">New students always get the next number (QC1001, QC1002, QC1003 …). A cancelled or failed save no longer skips a number.</p>
+      {rows === null ? <div className="spinner" /> : (
+        <div className="stats">
+          <div className="stat"><b>{rows.length}</b><span>Students (all statuses)</span></div>
+          <div className="stat"><b>{rows.length ? `QC1001–QC${max}` : '—'}</b><span>Current range</span></div>
+          <div className="stat"><b>{Math.max(0, gaps)}</b><span>Missing numbers</span></div>
+          <div className="stat"><b>{outOfOrder ? 'No' : 'Yes'}</b><span>In joining order</span></div>
+        </div>
+      )}
+      {err && <p className="error">{err}</p>}
+      {done && <p className="success">Done — {done.total} students now have IDs QC1001 to QC{1000 + done.total}. {done.changed?.length || 0} IDs changed; the list of old and new IDs was downloaded. Please print new ID cards (ID Cards page) and tell students their new ID.</p>}
+      {rows && rows.length > 0 && outOfOrder && (
+        <>
+          <p className="notice-line small">Renumbering changes Student IDs. <b>Print new ID cards afterwards and collect the old ones</b> — the barcode on an old card would show the old number, which may now belong to another student (the QR code on old cards still works). Students and parents use the new ID to sign in or check the application.</p>
+          <button className="btn" disabled={busy} onClick={renumber}>{busy ? 'Renumbering…' : `Renumber all IDs QC1001–QC${1000 + rows.length} (no gaps)`}</button>
+        </>
+      )}
+      {rows && rows.length > 0 && !outOfOrder && <p className="success small">All Student IDs are in order with no gaps. ✓</p>}
+    </section>
   );
 }
