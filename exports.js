@@ -106,14 +106,14 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
     const QS = 40;
     // optional barcode (same as the ID card) in the last column (t.barcode = one text per row)
     const bc = t.barcode && t.rows.length ? t.barcode : null;
-    const BM = 0.9, BH = 24; // bar width and height (pt) — large enough for a laser scanner
+    const BM = 0.7, BH = 15; // bar width and height (pt) — large enough for a laser scanner
     const bcCol = t.columns.length;
     autoTable(doc, {
       startY: y,
       head: [qrImgs ? ['QR', ...t.columns] : bc ? [...t.columns, 'Barcode'] : t.columns],
       body: t.rows.length ? (qrImgs ? t.rows.map((r) => ['', ...r]) : bc ? t.rows.map((r) => [...r, '']) : t.rows) : [[{ content: 'No records', colSpan: t.columns.length }]],
       ...(bc ? {
-        columnStyles: { [bcCol]: { cellWidth: 135, minCellHeight: BH + 16 } },
+        columnStyles: { [bcCol]: { cellWidth: 100, minCellHeight: BH + 13 } },
         bodyStyles: { valign: 'middle' },
         didDrawCell: (c) => {
           const v = c.section === 'body' && c.column.index === bcCol && bc[c.row.index];
