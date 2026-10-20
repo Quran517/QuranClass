@@ -26,7 +26,7 @@ function useQrImages(items) {
   useEffect(() => {
     let alive = true;
     Promise.all(items.map((i) =>
-      QRCode.toDataURL(i.qr, { width: 220, margin: 0, color: { dark: '#092F6B' } }).then((u) => [i.id, u]).catch(() => [i.id, ''])
+      QRCode.toDataURL(i.qr, { width: 220, margin: 0, color: { dark: '#1c2f55' } }).then((u) => [i.id, u]).catch(() => [i.id, ''])
     )).then((pairs) => alive && setImgs(Object.fromEntries(pairs)));
     return () => { alive = false; };
   }, [key]); // eslint-disable-line react-hooks/exhaustive-deps

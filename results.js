@@ -112,7 +112,7 @@ export function certificateValues(cert, { student, className, types, templates }
 
 
 // Draw Arabic text with the browser (correct letter joining and right-to-left order) as an image for the PDF.
-function arabicImg(text, { size = 14, color = '#092F6B', bold = false, maxW = 600 } = {}) {
+function arabicImg(text, { size = 14, color = '#1c2f55', bold = false, maxW = 600 } = {}) {
   const k = 4;
   const font = `${bold ? 700 : 400} ${size * k}px Amiri, 'Traditional Arabic', 'Arabic Typesetting', serif`;
   const m = document.createElement('canvas').getContext('2d');
@@ -140,7 +140,7 @@ export async function certificatePdf(cert, ctx, print = false) {
   const { t, v, body, bodyAr } = certificateValues(cert, ctx);
   const doc = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' });
   const W = doc.internal.pageSize.getWidth(), H = doc.internal.pageSize.getHeight();
-  const navy = [9, 47, 107], orange = [237, 91, 3], gold = [176, 141, 57];
+  const navy = [28, 47, 85], orange = [224, 116, 20], gold = [176, 141, 57];
   const ar = (text, y, opt) => { if (!text) return y; const im = arabicImg(text, opt); doc.addImage(im.url, 'PNG', W / 2 - im.w / 2, y, im.w, im.h); return y + im.h; };
   doc.setFillColor(255, 253, 247); doc.rect(0, 0, W, H, 'F');
   doc.setDrawColor(...navy); doc.setLineWidth(10); doc.rect(18, 18, W - 36, H - 36);
@@ -155,7 +155,7 @@ export async function certificatePdf(cert, ctx, print = false) {
   y = s.school_name_ar ? ar(s.school_name_ar, y + 3, { size: 13, bold: true, maxW: 500 }) : y + 4;
   doc.setFont('times', 'bolditalic'); doc.setFontSize(30); doc.setTextColor(...gold);
   doc.text(t.title || 'Certificate', W / 2, y + 30, { align: 'center' });
-  y = t.title_ar ? ar(t.title_ar, y + 35, { size: 21, bold: true, color: '#092F6B', maxW: 500 }) : y + 38;
+  y = t.title_ar ? ar(t.title_ar, y + 35, { size: 21, bold: true, color: '#1c2f55', maxW: 500 }) : y + 38;
   doc.setFont('helvetica', 'normal'); doc.setFontSize(10.5); doc.setTextColor(90, 100, 120);
   doc.text('This certificate is proudly presented to', W / 2, y + 12, { align: 'center' });
   y = ar('تُمنح هذه الشهادة إلى', y + 14, { size: 11, color: '#637089', maxW: 400 });

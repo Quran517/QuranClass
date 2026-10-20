@@ -7,7 +7,7 @@ export default function StudentQR({ student, size = 240 }) {
   const [src, setSrc] = useState('');
 
   useEffect(() => {
-    QRCode.toDataURL(QR_PREFIX + student.qr_token, { width: size * 2, margin: 1, color: { dark: '#092F6B' } })
+    QRCode.toDataURL(QR_PREFIX + student.qr_token, { width: size * 2, margin: 1, color: { dark: '#1c2f55' } })
       .then(setSrc)
       .catch(() => setSrc(''));
   }, [student.qr_token, size]);

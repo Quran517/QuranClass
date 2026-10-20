@@ -41,13 +41,13 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
   const doc = new jsPDF({ orientation, unit: 'pt', format: 'a4' });
-  const navy = [9, 47, 107];
-  const orange = [237, 91, 3];
+  const navy = [28, 47, 85];
+  const orange = [224, 116, 20];
 
   doc.setFillColor(...navy);
   doc.rect(0, 0, doc.internal.pageSize.getWidth(), 64, 'F');
-  doc.setFillColor(...orange);
-  doc.rect(0, 64, doc.internal.pageSize.getWidth(), 4, 'F');
+  // orange · green · maroon stripe, like the logo ring
+  { const pw = doc.internal.pageSize.getWidth(); [[224, 116, 20], [35, 80, 47], [116, 34, 36]].forEach((c, i) => { doc.setFillColor(...c); doc.rect(i * pw / 3, 64, pw / 3 + 1, 4, 'F'); }); }
   doc.setTextColor(255, 255, 255);
   doc.setFontSize(16);
   const logo = await logoData();
@@ -101,7 +101,7 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
     let qrImgs = null;
     if (t.qr && t.rows.length) {
       const QRCode = (await import('qrcode')).default;
-      qrImgs = await Promise.all(t.qr.map((v) => (v ? QRCode.toDataURL(v, { width: 160, margin: 0, color: { dark: '#092F6B' } }).catch(() => '') : '')));
+      qrImgs = await Promise.all(t.qr.map((v) => (v ? QRCode.toDataURL(v, { width: 160, margin: 0, color: { dark: '#1c2f55' } }).catch(() => '') : '')));
     }
     const QS = 40;
     // optional barcode (same as the ID card) in the last column (t.barcode = one text per row)
