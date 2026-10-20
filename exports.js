@@ -35,7 +35,7 @@ export async function downloadExcel(filename, sheets) {
   XLSX.writeFile(wb, filename);
 }
 
-export async function downloadPdf(filename, { title, subtitle, tables, orientation = 'landscape', print = false }) {
+export async function downloadPdf(filename, { title, subtitle, tables, orientation = 'landscape', print = false, signatures = [] }) {
   const { jsPDF } = await import('jspdf');
   const autoTable = (await import('jspdf-autotable')).default;
   const doc = new jsPDF({ orientation, unit: 'pt', format: 'a4' });
@@ -63,7 +63,33 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
     y += 14;
   }
 
-  for (const t of tables) {
+  const W0 = doc.internal.pageSize.getWidth(), H0 = doc.internal.pageSize.getHeight();
+  const drawSignatures = (list) => {
+    if (y > H0 - 80) { doc.addPage(); y = 70; }
+    const w = (W0 - 80) / list.length;
+    list.forEach((s, i) => {
+      const x = 40 + i * w;
+      doc.setDrawColor(150); doc.setLineWidth(0.6); doc.line(x + 10, y + 34, x + w - 20, y + 34);
+      doc.setFontSize(9); doc.setTextColor(60, 70, 90);
+      doc.text(s, x + 10, y + 46);
+    });
+    y += 64;
+    doc.setTextColor(32, 43, 60);
+  };
+
+  for (const [ti, t] of tables.entries()) {
+    // a section that starts on its own page (e.g. one class per page)
+    if (t.newPage && ti > 0) { doc.addPage(); y = 50; }
+    if (t.section) {
+      doc.setFillColor(...navy); doc.rect(40, y - 8, W0 - 80, 26, 'F');
+      doc.setFillColor(...orange); doc.rect(40, y + 18, W0 - 80, 2, 'F');
+      doc.setTextColor(255, 255, 255); doc.setFontSize(12);
+      doc.text(t.section, 50, y + 9);
+      doc.setTextColor(32, 43, 60);
+      y += 32;
+      if (t.sectionNote) { doc.setFontSize(9.5); doc.text(t.sectionNote, 40, y + 4); y += 14; }
+    }
+    if (t.signatures) { drawSignatures(t.signatures); continue; }
     if (t.heading) {
       doc.setFontSize(12);
       doc.text(t.heading, 40, y + 6);
@@ -73,13 +99,15 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
       startY: y,
       head: [t.columns],
       body: t.rows.length ? t.rows : [[{ content: 'No records', colSpan: t.columns.length }]],
-      styles: { fontSize: 9, cellPadding: 4 },
+      styles: t.compact ? { fontSize: 8, cellPadding: 2.6 } : { fontSize: 9, cellPadding: 4 },
       headStyles: { fillColor: navy },
       alternateRowStyles: { fillColor: [244, 247, 252] },
       margin: { left: 40, right: 40 },
     });
-    y = doc.lastAutoTable.finalY + 24;
+    y = doc.lastAutoTable.finalY + (t.compact ? 16 : 24);
   }
+
+  if (signatures.length) drawSignatures(signatures);
 
   const pages = doc.getNumberOfPages();
   for (let i = 1; i <= pages; i++) {

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
+import { roleLabel } from './perms.js';
 import { today, formatDate, STATUS_LABELS, classDates } from './util.js';
 import { getSettings } from './settings.js';
 import { downloadExcel, downloadPdf } from './exports.js';
@@ -27,6 +28,7 @@ export default function Reports({ profile }) {
   const [from, setFrom] = useState(() => classDates(getSettings().class_days, 8)[0] || today()); // last 8 class days
   const [to, setTo] = useState(today());
   const [view, setView] = useState('students');
+  const [separate, setSeparate] = useState(true);
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
@@ -36,16 +38,22 @@ export default function Reports({ profile }) {
     [classId, classes.data]
   );
   const className = (id) => (classes.data || []).find((c) => c.id === id)?.name || '';
+  const staff = useQuery(() => supabase.from('profiles').select('id, full_name, staff_code, role, staff_title, phone, email').in('role', ['teacher', 'admin']).order('full_name'), [profile.id]);
+  const person = (id) => (staff.data || []).find((p) => p.id === id);
+  const klassOf = (id) => (classes.data || []).find((c) => c.id === id) || {};
+  const groupOf = (id) => { const c = klassOf(id); const g = (c.group_name || '').split(' · '); return c.group_name ? (c.name && c.name.startsWith(g[0]) ? g.slice(1).join(' · ') || c.group_name : c.group_name) : ''; };
+  const teacherOf = (id) => { const t = person(klassOf(id).teacher_id); return t ? `${t.full_name || ''}${t.staff_code ? ' (' + t.staff_code + ')' : ''}` : ''; };
+  const principal = (staff.data || []).find((p) => p.staff_title === 'principal');
 
   async function run() {
     if (!classIds.length) { setData({ students: [], att: [] }); return; }
     setLoading(true); setErr('');
     try {
       const [students, att] = await Promise.all([
-        fetchAll(() => supabase.from('students').select('id, full_name, student_code, class_id')
+        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id')
           .in('class_id', classIds).eq('status', 'approved').order('full_name')),
         fetchAll(() => supabase.from('attendance')
-          .select('id, student_id, class_id, att_date, status, method, students(full_name, student_code)')
+          .select('id, student_id, class_id, att_date, status, method, students(full_name, student_code, admission_no)')
           .in('class_id', classIds).gte('att_date', from).lte('att_date', to)
           .order('att_date', { ascending: false })),
       ]);
@@ -63,7 +71,7 @@ export default function Reports({ profile }) {
     const by = {};
     for (const s of data.students) by[s.id] = { ...s, present: 0, late: 0, absent: 0, excused: 0, total: 0 };
     for (const a of data.att) {
-      if (!by[a.student_id]) by[a.student_id] = { id: a.student_id, full_name: a.students?.full_name || '?', student_code: a.students?.student_code || '', class_id: a.class_id, present: 0, late: 0, absent: 0, excused: 0, total: 0 };
+      if (!by[a.student_id]) by[a.student_id] = { id: a.student_id, full_name: a.students?.full_name || '?', student_code: a.students?.student_code || '', admission_no: a.students?.admission_no || '', class_id: a.class_id, present: 0, late: 0, absent: 0, excused: 0, total: 0 };
       by[a.student_id][a.status] += 1;
       by[a.student_id].total += 1;
     }
@@ -87,23 +95,69 @@ export default function Reports({ profile }) {
   const fileBase = `attendance-${label.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}`;
 
   const summaryRows = summary.map((s) => ({
-    'Student ID': s.student_code, Name: s.full_name, Class: className(s.class_id),
+    'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id), Teacher: teacherOf(s.class_id),
     Present: s.present, Late: s.late, Absent: s.absent, Excused: s.excused,
     'Sessions marked': s.total, 'Attendance %': pct(s.present + s.late, s.total),
   }));
   const dailyRows = daily.map((d) => ({
-    Date: d.att_date, Class: className(d.class_id), Present: d.present, Late: d.late,
+    Date: d.att_date, Class: className(d.class_id), Group: groupOf(d.class_id), Teacher: teacherOf(d.class_id), Present: d.present, Late: d.late,
     Absent: d.absent, Excused: d.excused, Marked: d.total, 'Attendance %': pct(d.present + d.late, d.total),
   }));
   const detailRows = (data?.att || []).map((a) => ({
-    Date: a.att_date, Class: className(a.class_id), 'Student ID': a.students?.student_code || '',
+    Date: a.att_date, Class: className(a.class_id), Group: groupOf(a.class_id), Teacher: teacherOf(a.class_id), 'Student ID': a.students?.student_code || '', 'Adm No': a.students?.admission_no || '',
     Name: a.students?.full_name || '', Status: STATUS_LABELS[a.status], Method: a.method === 'qr' ? 'QR scan' : 'Manual',
   }));
 
+  // Classes with their group, teacher and attendance in this period
+  const classRows = classIds.map((id) => {
+    const rows = (data?.att || []).filter((a) => a.class_id === id);
+    const t = person(klassOf(id).teacher_id);
+    return {
+      Class: className(id), Group: groupOf(id), Teacher: t?.full_name || '—', 'Teacher ID': t?.staff_code || '', 'Teacher phone': t?.phone || '',
+      Students: (data?.students || []).filter((s) => s.class_id === id).length,
+      'Sessions': new Set(rows.map((r) => r.att_date)).size,
+      'Attendance %': pct(rows.filter((r) => r.status === 'present' || r.status === 'late').length, rows.length),
+    };
+  });
+  // Principal first, then admins, assistants and teachers
+  const rank = (p) => (p.staff_title === 'principal' ? 0 : p.role === 'admin' ? 1 : p.staff_title === 'assistant' ? 2 : 3);
+  const staffRows = (staff.data || []).slice().sort((a, b) => rank(a) - rank(b) || (a.full_name || '').localeCompare(b.full_name || '')).map((p) => ({
+    Name: p.full_name || '', 'Staff ID': p.staff_code || '', Role: p.role === 'admin' ? 'Admin' : roleLabel(p), Phone: p.phone || '',
+    Email: p.email && !/@noemail\.quranclass\.local$/.test(p.email) ? p.email : '',
+    Classes: (classes.data || []).filter((c) => c.teacher_id === p.id).map((c) => c.name).join(', '),
+  }));
+  const single = classId !== 'all';
+  const headerLine = [
+    `Period: ${period}`,
+    single && groupOf(classId) && `Group: ${groupOf(classId)}`,
+    single && `Teacher: ${teacherOf(classId) || '—'}`,
+    principal && `Principal: ${principal.full_name}`,
+  ].filter(Boolean).join('   ·   ');
+
+  const perClass = classId === 'all' && separate && classIds.length > 1;
+  const sheetName = (name, used) => { let n = (name || 'Class').replace(/[\\/?*[\]:]/g, ' ').slice(0, 28); let k = n, i = 2; while (used.has(k)) k = `${n.slice(0, 25)} ${i++}`; used.add(k); return k; };
+  const strip = (r) => { const { Class, Group, Teacher, ...rest } = r; return rest; }; // eslint-disable-line no-unused-vars
+
   function excel() {
+    if (perClass) {
+      const used = new Set(['Classes & teachers', 'Staff', 'All records', 'Daily summary']);
+      downloadExcel(fileBase + '.xlsx', [
+        { name: 'Classes & teachers', rows: classRows },
+        ...classIds.map((id) => ({
+          name: sheetName(className(id), used),
+          rows: summaryRows.filter((r, i) => summary[i].class_id === id).map(strip),
+        })),
+        { name: 'Daily summary', rows: dailyRows },
+        { name: 'Staff', rows: staffRows },
+        { name: 'All records', rows: detailRows },
+      ]);
+      return;
+    }
     downloadExcel(fileBase + '.xlsx', [
       { name: 'Student summary', rows: summaryRows },
       { name: 'Daily summary', rows: dailyRows },
+      { name: 'Classes & teachers', rows: classRows },
+      { name: 'Staff', rows: staffRows },
       { name: 'All records', rows: detailRows },
     ]);
   }
@@ -112,12 +166,47 @@ export default function Reports({ profile }) {
     const toTable = (rows) => ({ columns: Object.keys(rows[0] || {}), rows: rows.map((r) => Object.values(r)) });
     const s = summaryRows.length ? toTable(summaryRows) : { columns: ['Student'], rows: [] };
     const d = dailyRows.length ? toTable(dailyRows) : { columns: ['Date'], rows: [] };
+    const c = classRows.length ? toTable(classRows) : { columns: ['Class'], rows: [] };
+    const st = staffRows.length ? toTable(staffRows) : { columns: ['Name'], rows: [] };
+    if (perClass) {
+      const sections = classIds.flatMap((id) => {
+        const sRows = summaryRows.filter((r, i) => summary[i].class_id === id).map(strip);
+        const dRows = dailyRows.filter((r, i) => daily[i].class_id === id).map(strip);
+        const cr = classRows.find((r) => r.Class === className(id));
+        return [
+          { newPage: true, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
+            sectionNote: [`Teacher: ${teacherOf(id) || '—'}`, principal && `Principal: ${principal.full_name}`, `Period: ${period}`, cr && `Students: ${cr.Students} · Attendance: ${cr['Attendance %']}%`].filter(Boolean).join('   ·   '),
+            heading: 'Student summary', compact: true, ...(sRows.length ? toTable(sRows) : { columns: ['Student'], rows: [] }) },
+          { heading: 'Daily summary', compact: true, ...(dRows.length ? toTable(dRows) : { columns: ['Date'], rows: [] }) },
+          { signatures: [`Class Teacher${teacherOf(id) ? ': ' + teacherOf(id) : ''}`, `Principal${principal ? ': ' + principal.full_name : ''}`, 'Admin / Date'] },
+        ];
+      });
+      downloadPdf(fileBase + '.pdf', {
+        title: `Attendance report — ${label} (each class separately)`,
+        subtitle: headerLine,
+        tables: [
+          { heading: 'Classes, groups & teachers', ...c },
+          { heading: 'Principal & staff', ...st },
+          ...sections,
+        ],
+      });
+      return;
+    }
     downloadPdf(fileBase + '.pdf', {
       title: `Attendance report — ${label}`,
-      subtitle: `Period: ${period}`,
-      tables: view === 'daily'
-        ? [{ heading: 'Daily summary', ...d }, { heading: 'Student summary', ...s }]
-        : [{ heading: 'Student summary', ...s }, { heading: 'Daily summary', ...d }],
+      subtitle: headerLine,
+      tables: [
+        { heading: 'Classes, groups & teachers', ...c },
+        ...(view === 'daily'
+          ? [{ heading: 'Daily summary', ...d }, { heading: 'Student summary', ...s }]
+          : [{ heading: 'Student summary', ...s }, { heading: 'Daily summary', ...d }]),
+        { heading: 'Principal & staff', ...st },
+      ],
+      signatures: [
+        `Class Teacher${single && teacherOf(classId) ? ': ' + teacherOf(classId) : ''}`,
+        `Principal${principal ? ': ' + principal.full_name : ''}`,
+        'Admin / Date',
+      ],
     });
   }
 
@@ -134,12 +223,15 @@ export default function Reports({ profile }) {
         <div className="filters">
           <select value={classId} onChange={(e) => setClassId(e.target.value)} aria-label="Class">
             <option value="all">{(profile.role === 'admin' || (profile.permissions || []).includes('reports')) ? 'All classes' : 'All my classes'}</option>
-            {classes.data.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {classes.data.map((c) => <option key={c.id} value={c.id}>{c.name}{c.group_name ? ` · ${groupOf(c.id)}` : ''}</option>)}
           </select>
           <label className="inline">From <input type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} /></label>
           <label className="inline">To <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} /></label>
         </div>
         <div className="actions">
+          {classId === 'all' && classIds.length > 1 && (
+            <label className="inline small"><input type="checkbox" checked={separate} onChange={(e) => setSeparate(e.target.checked)} /> Each class separately (own page in PDF, own sheet in Excel)</label>
+          )}
           <button className="btn" onClick={excel} disabled={!data || loading}>Download Excel</button>
           <button className="btn ghost" onClick={pdf} disabled={!data || loading}>Download PDF</button>
         </div>
@@ -156,7 +248,10 @@ export default function Reports({ profile }) {
 
       <section className="card">
         <div className="row-between">
-          <h2>{label} <span className="small muted">{period}</span></h2>
+          <div>
+            <h2>{label} <span className="small muted">{period}</span></h2>
+            <p className="small muted">{[single && groupOf(classId) && `Group: ${groupOf(classId)}`, single && `Teacher: ${teacherOf(classId) || 'not assigned'}`, principal && `Principal: ${principal.full_name}`].filter(Boolean).join(' · ')}</p>
+          </div>
           <div className="segmented">
             <button className={view === 'students' ? 'active' : ''} onClick={() => setView('students')}>By student</button>
             <button className={view === 'daily' ? 'active' : ''} onClick={() => setView('daily')}>By date</button>
@@ -172,7 +267,7 @@ export default function Reports({ profile }) {
                     const p = pct(s.present + s.late, s.total);
                     return (
                       <tr key={s.id}>
-                        <td>{s.full_name}<div className="small muted">{s.student_code}</div></td>
+                        <td>{s.full_name}<div className="small muted">{s.student_code}{s.admission_no ? ` · Adm ${s.admission_no}` : ''}</div></td>
                         {classId === 'all' && <td className="small">{className(s.class_id)}</td>}
                         <td>{s.present}</td><td>{s.late}</td><td>{s.absent}</td><td>{s.excused}</td>
                         <td><b className={s.total && p < 75 ? 'low' : ''}>{s.total ? p + '%' : '—'}</b></td>
