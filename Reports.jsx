@@ -44,7 +44,8 @@ export default function Reports({ profile }) {
   const staff = useQuery(() => supabase.from('profiles').select('id, full_name, staff_code, role, staff_title, phone, email').in('role', ['teacher', 'admin']).order('full_name'), [profile.id]);
   const person = (id) => (staff.data || []).find((p) => p.id === id);
   const klassOf = (id) => (classes.data || []).find((c) => c.id === id) || {};
-  const groupOf = (id) => { const c = klassOf(id); const g = (c.group_name || '').split(' · '); return c.group_name ? (c.name && c.name.startsWith(g[0]) ? g.slice(1).join(' · ') || c.group_name : c.group_name) : ''; };
+  // Group = ages and boys/girls, e.g. "Ages 12–15 · Boys" (the group name is in the class name)
+  const groupOf = (id) => { const c = klassOf(id); const g = (c.group_name || '').split(' · ').filter(Boolean); return g.length > 1 ? g.slice(1).join(' · ') : (c.group_name || ''); };
   const teacherOf = (id) => { const t = person(klassOf(id).teacher_id); return t ? `${t.full_name || ''}${t.staff_code ? ' (' + t.staff_code + ')' : ''}` : ''; };
   const principal = (staff.data || []).find((p) => p.staff_title === 'principal');
   const tName = (id) => person(klassOf(id).teacher_id)?.full_name || '';
@@ -208,7 +209,9 @@ export default function Reports({ profile }) {
     ]);
   }
 
-  const toTable = (rows) => ({ columns: Object.keys(rows[0] || {}), rows: rows.map((r) => Object.values(r)) });
+  // shorter headings in the PDF so every row fits on one line
+  const SHORT = { 'Sessions marked': 'Sessions', 'Attendance %': 'Att. %', 'Teacher phone': 'Phone' };
+  const toTable = (rows) => ({ columns: Object.keys(rows[0] || {}).map((k) => SHORT[k] || k), rows: rows.map((r) => Object.values(r)) });
   const tbl = (rows, empty) => (rows.length ? toTable(rows) : { columns: [empty], rows: [] });
   const studentsOf = (ids) => summaryRows.filter((r, i) => ids.includes(summary[i].class_id));
   // Each student's barcode (same as on the ID card) after Attendance % — scan it to mark attendance.

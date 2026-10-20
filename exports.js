@@ -108,12 +108,31 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
     const bc = t.barcode && t.rows.length ? t.barcode : null;
     const BM = 0.7, BH = 15; // bar width and height (pt) — large enough for a laser scanner
     const bcCol = t.columns.length;
+    // Every row on one line: each column is as wide as its longest text; if the table is
+    // wider than the page, the letters get a little smaller (never below 6.5).
+    const base = t.compact ? 8 : 9, pad = t.compact ? 2.6 : 4;
+    const extra = (qrImgs ? QS + 8 : 0) + (bc ? 100 : 0);
+    const measure = (f) => {
+      doc.setFontSize(f);
+      return t.columns.reduce((sum, h, i) => {
+        doc.setFont('helvetica', 'bold'); let w = doc.getTextWidth(String(h));
+        doc.setFont('helvetica', 'normal');
+        for (const r of t.rows) w = Math.max(w, doc.getTextWidth(String(r[i] ?? '')));
+        return sum + w + pad * 2 + 1;
+      }, extra);
+    };
+    let fs = base;
+    if (t.rows.length) { const need = measure(base); const room = W0 - 80; if (need > room) fs = Math.max(6.5, Math.floor(base * room / need * 10) / 10); }
+    doc.setFont('helvetica', 'normal');
+    const fixed = {};
+    if (t.rows.length) t.columns.forEach((h, i) => { fixed[i + (qrImgs ? 1 : 0)] = { cellWidth: 'wrap' }; });
     autoTable(doc, {
       startY: y,
       head: [qrImgs ? ['QR', ...t.columns] : bc ? [...t.columns, 'Barcode'] : t.columns],
+      columnStyles: fixed,
       body: t.rows.length ? (qrImgs ? t.rows.map((r) => ['', ...r]) : bc ? t.rows.map((r) => [...r, '']) : t.rows) : [[{ content: 'No records', colSpan: t.columns.length }]],
       ...(bc ? {
-        columnStyles: { [bcCol]: { cellWidth: 100, minCellHeight: BH + 13 } },
+        columnStyles: { ...fixed, [bcCol]: { cellWidth: 100, minCellHeight: BH + 13 } },
         bodyStyles: { valign: 'middle' },
         didDrawCell: (c) => {
           const v = c.section === 'body' && c.column.index === bcCol && bc[c.row.index];
@@ -128,14 +147,14 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
         },
       } : {}),
       ...(qrImgs ? {
-        columnStyles: { 0: { cellWidth: QS + 8, minCellHeight: QS + 6 } },
+        columnStyles: { ...fixed, 0: { cellWidth: QS + 8, minCellHeight: QS + 6 } },
         bodyStyles: { valign: 'middle' },
         didDrawCell: (c) => {
           const img = c.section === 'body' && c.column.index === 0 && qrImgs[c.row.index];
           if (img) doc.addImage(img, 'PNG', c.cell.x + 4, c.cell.y + (c.cell.height - QS) / 2, QS, QS);
         },
       } : {}),
-      styles: t.compact ? { fontSize: 8, cellPadding: 2.6 } : { fontSize: 9, cellPadding: 4 },
+      styles: { fontSize: fs, cellPadding: pad },
       headStyles: { fillColor: navy },
       alternateRowStyles: { fillColor: [244, 247, 252] },
       margin: { left: 40, right: 40 },
