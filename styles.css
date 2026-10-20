@@ -793,3 +793,8 @@ tbody tr:hover td { background: #f8fafe; }
 .scanner-test ol { margin: 6px 0 0 18px; padding: 0; }
 .scanner-test li { margin: 3px 0; }
 .split-select { width: auto; min-width: 250px; }
+.teacher-pick { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 8px; margin: 10px 0 14px; }
+.teacher-chip { flex-direction: row; align-items: center; gap: 10px; border: 1.5px solid var(--line); border-radius: 12px; padding: 10px 12px; margin: 0; cursor: pointer; background: #fff; font-weight: 400; }
+.teacher-chip.on { border-color: var(--navy-2); background: #eef3fb; }
+.teacher-chip input { width: 18px; height: 18px; flex: none; }
+.teacher-chip small { display: block; color: var(--muted); font-size: .76rem; }

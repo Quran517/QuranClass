@@ -99,7 +99,7 @@ export default function Reports({ profile }) {
     : teacherId !== 'all' ? `Teacher: ${teacherId === 'none' ? 'not assigned' : (person(teacherId)?.full_name || '')}`
     : ((profile.role === 'admin' || (profile.permissions || []).includes('reports')) ? 'All classes' : 'My classes');
   const period = `${formatDate(from)} – ${formatDate(to)}`;
-  const fileBase = `attendance-${label.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}`;
+  const fileBase = `class-report-${label.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}`;
 
   const summaryRows = summary.map((s) => ({
     'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id),
@@ -218,7 +218,7 @@ export default function Reports({ profile }) {
   function pdf() {
     if (perTeacher) {
       downloadPdf(fileBase + '.pdf', {
-        title: `Attendance report — ${label}`, subtitle: subtitleFor(),
+        title: `Class report — ${label}`, subtitle: subtitleFor(),
         tables: teacherGroups.flatMap((g, k) => [
           { newPage: k > 0, section: `Teacher: ${g.name}${g.code ? ' (' + g.code + ')' : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf(g.classIds), 'Class') },
@@ -229,7 +229,7 @@ export default function Reports({ profile }) {
     }
     if (perClass) {
       downloadPdf(fileBase + '.pdf', {
-        title: `Attendance report — ${label}`, subtitle: subtitleFor(),
+        title: `Class report — ${label}`, subtitle: subtitleFor(),
         tables: classIds.flatMap((id, k) => [
           { newPage: k > 0, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf([id]), 'Class') },
@@ -239,7 +239,7 @@ export default function Reports({ profile }) {
       return;
     }
     downloadPdf(fileBase + '.pdf', {
-      title: `Attendance report — ${label}`, subtitle: subtitleFor(),
+      title: `Class report — ${label}`, subtitle: subtitleFor(),
       tables: [
         { heading: 'Classes, groups & teachers', ...tbl(classRows, 'Class') },
         { heading: 'Student summary', ...tbl(summaryRows, 'Student') },
@@ -247,17 +247,35 @@ export default function Reports({ profile }) {
     });
   }
 
-  // One separate PDF file for every teacher
+  // Class report: teacher at the top, then the students of that teacher's classes.
   const [eachBusy, setEachBusy] = useState('');
-  async function pdfEachTeacher() {
-    for (const [k, g] of teacherGroups.entries()) {
-      setEachBusy(`${k + 1}/${teacherGroups.length}`);
-      await downloadPdf(`attendance-${g.name.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}.pdf`, {
-        title: `Attendance report — Teacher: ${g.name}`, subtitle: subtitleFor(),
-        tables: [
-          { heading: 'Classes, groups & teachers', ...tbl(classesOf(g.classIds), 'Class') },
-          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student') },
-        ],
+  const [picked, setPicked] = useState(null);      // null = all teachers
+  const [oneFile, setOneFile] = useState(false);   // false = one PDF per teacher
+  const chosen = teacherGroups.filter((g) => !picked || picked.includes(g.id));
+  const teacherSection = (g, newPage) => {
+    const tr = teacherRows.find((r) => r.Teacher === g.name) || {};
+    return [
+      { newPage, section: `Teacher: ${g.name}${g.code ? '  (' + g.code + ')' : ''}`,
+        sectionNote: [g.phone && `Phone: ${g.phone}`, `Classes: ${tr.Classes || '—'}`, `Students: ${tr.Students ?? 0}`, `Attendance: ${tr['Attendance %'] ?? 0}%`].filter(Boolean).join('   ·   '),
+        heading: 'Classes', ...tbl(classesOf(g.classIds).map(({ Teacher, 'Teacher ID': a, 'Teacher phone': b, ...r }) => r), 'Class') }, // eslint-disable-line no-unused-vars
+      { heading: 'Student details', ...tbl(studentsOf(g.classIds), 'Student') },
+    ];
+  };
+  async function classReports() {
+    if (!chosen.length) return;
+    if (oneFile || chosen.length === 1) {
+      const one = chosen.length === 1;
+      await downloadPdf(`class-report-${one ? chosen[0].name.replace(/[^\w]+/g, '-').toLowerCase() : 'teachers'}-${from}-to-${to}.pdf`, {
+        title: `Class report — ${one ? 'Teacher: ' + chosen[0].name : chosen.length + ' teachers'}`, subtitle: subtitleFor(),
+        tables: chosen.flatMap((g, k) => teacherSection(g, k > 0)),
+      });
+      return;
+    }
+    for (const [k, g] of chosen.entries()) {
+      setEachBusy(`${k + 1}/${chosen.length}`);
+      await downloadPdf(`class-report-${g.name.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}.pdf`, {
+        title: `Class report — Teacher: ${g.name}`, subtitle: subtitleFor(),
+        tables: teacherSection(g, false),
       });
       await new Promise((r) => setTimeout(r, 700)); // let the browser save each file
     }
@@ -273,7 +291,7 @@ export default function Reports({ profile }) {
   return (
     <>
       <section className="card">
-        <h2>Attendance reports</h2>
+        <h2>Class reports</h2>
         <div className="filters">
           <select value={classId} onChange={(e) => setClassId(e.target.value)} aria-label="Class">
             <option value="all">{(profile.role === 'admin' || (profile.permissions || []).includes('reports')) ? 'All classes' : 'All my classes'}</option>
@@ -301,11 +319,7 @@ export default function Reports({ profile }) {
           )}
           <button className="btn" onClick={excel} disabled={!data || loading}>Download Excel</button>
           <button className="btn ghost" onClick={pdf} disabled={!data || loading}>Download PDF</button>
-          {classId === 'all' && teacherGroups.length > 1 && (
-            <button className="btn ghost" onClick={pdfEachTeacher} disabled={!data || loading || !!eachBusy}>
-              {eachBusy ? `Preparing ${eachBusy}…` : `PDF for each teacher (${teacherGroups.length} files)`}
-            </button>
-          )}
+
         </div>
         {err && <p className="error">{err}</p>}
         {data && (
@@ -317,6 +331,47 @@ export default function Reports({ profile }) {
           </div>
         )}
       </section>
+
+      {teacherGroups.length > 0 && (
+        <section className="card">
+          <div className="row-between">
+            <div>
+              <h2>Class report by teacher</h2>
+              <p className="small muted">Teacher at the top, then the details of their students ({period}). Choose one teacher or several.</p>
+            </div>
+            <div className="actions small">
+              <button className="link" onClick={() => setPicked(null)}>Select all</button>
+              <button className="link" onClick={() => setPicked([])}>Select none</button>
+            </div>
+          </div>
+          <div className="teacher-pick">
+            {teacherGroups.map((g) => {
+              const on = !picked || picked.includes(g.id);
+              const tr = teacherRows.find((r) => r.Teacher === g.name) || {};
+              return (
+                <label key={g.id} className={`teacher-chip ${on ? 'on' : ''}`}>
+                  <input type="checkbox" checked={on} onChange={(e) => {
+                    const cur = picked || teacherGroups.map((x) => x.id);
+                    setPicked(e.target.checked ? [...cur, g.id] : cur.filter((x) => x !== g.id));
+                  }} />
+                  <span><b>{g.name}</b>{g.code ? ` · ${g.code}` : ''}<small>{tr.Classes} · {tr.Students} students</small></span>
+                </label>
+              );
+            })}
+          </div>
+          <div className="actions">
+            {chosen.length > 1 && (
+              <select value={oneFile ? 'one' : 'each'} onChange={(e) => setOneFile(e.target.value === 'one')} aria-label="PDF files" className="split-select">
+                <option value="each">A separate PDF for each teacher ({chosen.length} files)</option>
+                <option value="one">One PDF — each teacher on a new page</option>
+              </select>
+            )}
+            <button className="btn" onClick={classReports} disabled={!data || loading || !chosen.length || !!eachBusy}>
+              {eachBusy ? `Preparing ${eachBusy}…` : chosen.length === 1 ? `Download class report — ${chosen[0].name}` : `Download class report${oneFile ? '' : 's'} (${chosen.length} teachers)`}
+            </button>
+          </div>
+        </section>
+      )}
 
       <section className="card">
         <div className="row-between">
