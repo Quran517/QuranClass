@@ -1,4 +1,5 @@
 import { getSettings, getLogo } from './settings.js';
+import { code128Widths } from './barcode.js';
 
 // Load the logo as a PNG data URL for the PDF (works for the built-in or an uploaded logo).
 async function logoData() {
@@ -96,10 +97,44 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
       doc.text(t.heading, 40, y + 6);
       y += 14;
     }
+    // optional QR code in the first column of every row (t.qr = one text per row)
+    let qrImgs = null;
+    if (t.qr && t.rows.length) {
+      const QRCode = (await import('qrcode')).default;
+      qrImgs = await Promise.all(t.qr.map((v) => (v ? QRCode.toDataURL(v, { width: 160, margin: 0, color: { dark: '#092F6B' } }).catch(() => '') : '')));
+    }
+    const QS = 40;
+    // optional barcode (same as the ID card) in the last column (t.barcode = one text per row)
+    const bc = t.barcode && t.rows.length ? t.barcode : null;
+    const BM = 0.9, BH = 24; // bar width and height (pt) — large enough for a laser scanner
+    const bcCol = t.columns.length;
     autoTable(doc, {
       startY: y,
-      head: [t.columns],
-      body: t.rows.length ? t.rows : [[{ content: 'No records', colSpan: t.columns.length }]],
+      head: [qrImgs ? ['QR', ...t.columns] : bc ? [...t.columns, 'Barcode'] : t.columns],
+      body: t.rows.length ? (qrImgs ? t.rows.map((r) => ['', ...r]) : bc ? t.rows.map((r) => [...r, '']) : t.rows) : [[{ content: 'No records', colSpan: t.columns.length }]],
+      ...(bc ? {
+        columnStyles: { [bcCol]: { cellWidth: 135, minCellHeight: BH + 16 } },
+        bodyStyles: { valign: 'middle' },
+        didDrawCell: (c) => {
+          const v = c.section === 'body' && c.column.index === bcCol && bc[c.row.index];
+          if (!v) return;
+          const widths = code128Widths(v);
+          const total = widths.reduce((a, w) => a + w, 0) * BM;
+          let x = c.cell.x + (c.cell.width - total) / 2; const top = c.cell.y + (c.cell.height - BH - 8) / 2;
+          doc.setFillColor(255, 255, 255); doc.rect(x - 8, top - 3, total + 16, BH + 12, 'F'); // white quiet zone
+          doc.setFillColor(0, 0, 0);
+          widths.forEach((w, i) => { if (i % 2 === 0) doc.rect(x, top, w * BM, BH, 'F'); x += w * BM; });
+          doc.setFontSize(6.5); doc.setTextColor(40); doc.text(v, c.cell.x + c.cell.width / 2, top + BH + 7, { align: 'center' });
+        },
+      } : {}),
+      ...(qrImgs ? {
+        columnStyles: { 0: { cellWidth: QS + 8, minCellHeight: QS + 6 } },
+        bodyStyles: { valign: 'middle' },
+        didDrawCell: (c) => {
+          const img = c.section === 'body' && c.column.index === 0 && qrImgs[c.row.index];
+          if (img) doc.addImage(img, 'PNG', c.cell.x + 4, c.cell.y + (c.cell.height - QS) / 2, QS, QS);
+        },
+      } : {}),
       styles: t.compact ? { fontSize: 8, cellPadding: 2.6 } : { fontSize: 9, cellPadding: 4 },
       headStyles: { fillColor: navy },
       alternateRowStyles: { fillColor: [244, 247, 252] },

@@ -55,7 +55,7 @@ export default function Reports({ profile }) {
     setLoading(true); setErr('');
     try {
       const [students, att] = await Promise.all([
-        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id')
+        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id, qr_token')
           .in('class_id', classIds).eq('status', 'approved').order('full_name')),
         fetchAll(() => supabase.from('attendance')
           .select('id, student_id, class_id, att_date, status, method, students(full_name, student_code, admission_no)')
@@ -211,6 +211,8 @@ export default function Reports({ profile }) {
   const toTable = (rows) => ({ columns: Object.keys(rows[0] || {}), rows: rows.map((r) => Object.values(r)) });
   const tbl = (rows, empty) => (rows.length ? toTable(rows) : { columns: [empty], rows: [] });
   const studentsOf = (ids) => summaryRows.filter((r, i) => ids.includes(summary[i].class_id));
+  // Each student's barcode (same as on the ID card) after Attendance % — scan it to mark attendance.
+  const qrOf = (ids) => (withQr ? summary.filter((x) => !ids || ids.includes(x.class_id)).map((x) => x.student_code || '') : undefined);
   const classesOf = (ids) => classRows.filter((r) => ids.some((id) => className(id) === r.Class));
   const subtitleFor = () => [`Period: ${period}`, principal && `Principal: ${principal.full_name}`].filter(Boolean).join('   ·   ');
 
@@ -222,7 +224,7 @@ export default function Reports({ profile }) {
         tables: teacherGroups.flatMap((g, k) => [
           { newPage: k > 0, section: `Teacher: ${g.name}${g.code ? ' (' + g.code + ')' : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf(g.classIds), 'Class') },
-          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student') },
+          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds) },
         ]),
       });
       return;
@@ -233,7 +235,7 @@ export default function Reports({ profile }) {
         tables: classIds.flatMap((id, k) => [
           { newPage: k > 0, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf([id]), 'Class') },
-          { heading: 'Student summary', ...tbl(studentsOf([id]), 'Student') },
+          { heading: 'Student summary', ...tbl(studentsOf([id]), 'Student'), barcode: qrOf([id]) },
         ]),
       });
       return;
@@ -242,7 +244,7 @@ export default function Reports({ profile }) {
       title: `Class report — ${label}`, subtitle: subtitleFor(),
       tables: [
         { heading: 'Classes, groups & teachers', ...tbl(classRows, 'Class') },
-        { heading: 'Student summary', ...tbl(summaryRows, 'Student') },
+        { heading: 'Student summary', ...tbl(summaryRows, 'Student'), barcode: qrOf(null) },
       ],
     });
   }
@@ -251,6 +253,7 @@ export default function Reports({ profile }) {
   const [eachBusy, setEachBusy] = useState('');
   const [picked, setPicked] = useState(null);      // null = all teachers
   const [oneFile, setOneFile] = useState(false);   // false = one PDF per teacher
+  const [withQr, setWithQr] = useState(true);       // student QR codes in the PDF
   const [ready, setReady] = useState([]);          // the separate teacher PDFs, ready to save
   const chosen = teacherGroups.filter((g) => !picked || picked.includes(g.id));
   const teacherSection = (g, newPage) => {
@@ -259,7 +262,7 @@ export default function Reports({ profile }) {
       { newPage, section: `Teacher: ${g.name}${g.code ? '  (' + g.code + ')' : ''}`,
         sectionNote: [g.phone && `Phone: ${g.phone}`, `Classes: ${tr.Classes || '—'}`, `Students: ${tr.Students ?? 0}`, `Attendance: ${tr['Attendance %'] ?? 0}%`].filter(Boolean).join('   ·   '),
         heading: 'Classes', ...tbl(classesOf(g.classIds).map(({ Teacher, 'Teacher ID': a, 'Teacher phone': b, ...r }) => r), 'Class') }, // eslint-disable-line no-unused-vars
-      { heading: 'Student details', ...tbl(studentsOf(g.classIds), 'Student') },
+      { heading: 'Student details', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds) },
     ];
   };
   async function classReports() {
@@ -364,6 +367,7 @@ export default function Reports({ profile }) {
               );
             })}
           </div>
+          <label className="check-inline"><input type="checkbox" checked={withQr} onChange={(e) => setWithQr(e.target.checked)} /> Show each student's barcode after Attendance % (same as the ID card — scan it to mark attendance)</label>
           <div className="actions">
             {chosen.length > 1 && (
               <select value={oneFile ? 'one' : 'each'} onChange={(e) => setOneFile(e.target.value === 'one')} aria-label="PDF files" className="split-select">
