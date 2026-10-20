@@ -208,80 +208,60 @@ export default function Reports({ profile }) {
     ]);
   }
 
+  const toTable = (rows) => ({ columns: Object.keys(rows[0] || {}), rows: rows.map((r) => Object.values(r)) });
+  const tbl = (rows, empty) => (rows.length ? toTable(rows) : { columns: [empty], rows: [] });
+  const studentsOf = (ids) => summaryRows.filter((r, i) => ids.includes(summary[i].class_id));
+  const classesOf = (ids) => classRows.filter((r) => ids.some((id) => className(id) === r.Class));
+  const subtitleFor = () => [`Period: ${period}`, principal && `Principal: ${principal.full_name}`].filter(Boolean).join('   ·   ');
+
+  // PDF = heading + "Classes, groups & teachers" + "Student summary" (nothing else)
   function pdf() {
-    const toTable = (rows) => ({ columns: Object.keys(rows[0] || {}), rows: rows.map((r) => Object.values(r)) });
-    const s = summaryRows.length ? toTable(summaryRows) : { columns: ['Student'], rows: [] };
-    const d = dailyRows.length ? toTable(dailyRows) : { columns: ['Date'], rows: [] };
-    const c = classRows.length ? toTable(classRows) : { columns: ['Class'], rows: [] };
-    const st = staffRows.length ? toTable(staffRows) : { columns: ['Name'], rows: [] };
-    const bt = teacherRows.length ? toTable(teacherRows) : { columns: ['Teacher'], rows: [] };
     if (perTeacher) {
-      const sections = teacherGroups.flatMap((g) => {
-        const sRows = summaryRows.filter((r, i) => g.classIds.includes(summary[i].class_id)).map(stripT);
-        const dRows = dailyRows.filter((r, i) => g.classIds.includes(daily[i].class_id)).map(stripT);
-        const tr = teacherRows.find((r) => r.Teacher === g.name);
-        return [
-          { newPage: true, section: `${g.name}${g.code ? ' (' + g.code + ')' : ''}`,
-            sectionNote: [`Classes: ${tr?.Classes || '—'}`, principal && `Principal: ${principal.full_name}`, `Period: ${period}`, tr && `Students: ${tr.Students} · Attendance: ${tr['Attendance %']}%`].filter(Boolean).join('   ·   '),
-            heading: 'Student summary', compact: true, ...(sRows.length ? toTable(sRows) : { columns: ['Student'], rows: [] }) },
-          { heading: 'Daily summary', compact: true, ...(dRows.length ? toTable(dRows) : { columns: ['Date'], rows: [] }) },
-          { signatures: [`Teacher${g.id !== 'none' ? ': ' + g.name : ''}`, `Principal${principal ? ': ' + principal.full_name : ''}`, 'Admin / Date'] },
-        ];
-      });
       downloadPdf(fileBase + '.pdf', {
-        title: `Attendance report — ${label} (each teacher separately)`,
-        subtitle: headerLine,
-        tables: [
-          { heading: 'By teacher', ...bt },
-          { heading: 'Classes, groups & teachers', ...c },
-          { heading: 'Principal & staff', ...st },
-          ...sections,
-        ],
+        title: `Attendance report — ${label}`, subtitle: subtitleFor(),
+        tables: teacherGroups.flatMap((g, k) => [
+          { newPage: k > 0, section: `Teacher: ${g.name}${g.code ? ' (' + g.code + ')' : ''}`,
+            heading: 'Classes, groups & teachers', ...tbl(classesOf(g.classIds), 'Class') },
+          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student') },
+        ]),
       });
       return;
     }
     if (perClass) {
-      const sections = classIds.flatMap((id) => {
-        const sRows = summaryRows.filter((r, i) => summary[i].class_id === id).map(strip);
-        const dRows = dailyRows.filter((r, i) => daily[i].class_id === id).map(strip);
-        const cr = classRows.find((r) => r.Class === className(id));
-        return [
-          { newPage: true, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
-            sectionNote: [`Teacher: ${teacherOf(id) || '—'}`, principal && `Principal: ${principal.full_name}`, `Period: ${period}`, cr && `Students: ${cr.Students} · Attendance: ${cr['Attendance %']}%`].filter(Boolean).join('   ·   '),
-            heading: 'Student summary', compact: true, ...(sRows.length ? toTable(sRows) : { columns: ['Student'], rows: [] }) },
-          { heading: 'Daily summary', compact: true, ...(dRows.length ? toTable(dRows) : { columns: ['Date'], rows: [] }) },
-          { signatures: [`Class Teacher${teacherOf(id) ? ': ' + teacherOf(id) : ''}`, `Principal${principal ? ': ' + principal.full_name : ''}`, 'Admin / Date'] },
-        ];
-      });
       downloadPdf(fileBase + '.pdf', {
-        title: `Attendance report — ${label} (each class separately)`,
-        subtitle: headerLine,
-        tables: [
-          { heading: 'Classes, groups & teachers', ...c },
-          { heading: 'By teacher', ...bt },
-          { heading: 'Principal & staff', ...st },
-          ...sections,
-        ],
+        title: `Attendance report — ${label}`, subtitle: subtitleFor(),
+        tables: classIds.flatMap((id, k) => [
+          { newPage: k > 0, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
+            heading: 'Classes, groups & teachers', ...tbl(classesOf([id]), 'Class') },
+          { heading: 'Student summary', ...tbl(studentsOf([id]), 'Student') },
+        ]),
       });
       return;
     }
     downloadPdf(fileBase + '.pdf', {
-      title: `Attendance report — ${label}`,
-      subtitle: headerLine,
+      title: `Attendance report — ${label}`, subtitle: subtitleFor(),
       tables: [
-        { heading: 'Classes, groups & teachers', ...c },
-        ...(teacherRows.length > 1 || view === 'teachers' ? [{ heading: 'By teacher', ...bt }] : []),
-        ...(view === 'daily'
-          ? [{ heading: 'Daily summary', ...d }, { heading: 'Student summary', ...s }]
-          : [{ heading: 'Student summary', ...s }, { heading: 'Daily summary', ...d }]),
-        { heading: 'Principal & staff', ...st },
-      ],
-      signatures: [
-        `Class Teacher${single && teacherOf(classId) ? ': ' + teacherOf(classId) : ''}`,
-        `Principal${principal ? ': ' + principal.full_name : ''}`,
-        'Admin / Date',
+        { heading: 'Classes, groups & teachers', ...tbl(classRows, 'Class') },
+        { heading: 'Student summary', ...tbl(summaryRows, 'Student') },
       ],
     });
+  }
+
+  // One separate PDF file for every teacher
+  const [eachBusy, setEachBusy] = useState('');
+  async function pdfEachTeacher() {
+    for (const [k, g] of teacherGroups.entries()) {
+      setEachBusy(`${k + 1}/${teacherGroups.length}`);
+      await downloadPdf(`attendance-${g.name.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}.pdf`, {
+        title: `Attendance report — Teacher: ${g.name}`, subtitle: subtitleFor(),
+        tables: [
+          { heading: 'Classes, groups & teachers', ...tbl(classesOf(g.classIds), 'Class') },
+          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student') },
+        ],
+      });
+      await new Promise((r) => setTimeout(r, 700)); // let the browser save each file
+    }
+    setEachBusy('');
   }
 
   if (classes.loading) return <div className="spinner" />;
@@ -321,6 +301,11 @@ export default function Reports({ profile }) {
           )}
           <button className="btn" onClick={excel} disabled={!data || loading}>Download Excel</button>
           <button className="btn ghost" onClick={pdf} disabled={!data || loading}>Download PDF</button>
+          {classId === 'all' && teacherGroups.length > 1 && (
+            <button className="btn ghost" onClick={pdfEachTeacher} disabled={!data || loading || !!eachBusy}>
+              {eachBusy ? `Preparing ${eachBusy}…` : `PDF for each teacher (${teacherGroups.length} files)`}
+            </button>
+          )}
         </div>
         {err && <p className="error">{err}</p>}
         {data && (
