@@ -102,12 +102,12 @@ export default function Reports({ profile }) {
   const fileBase = `attendance-${label.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}`;
 
   const summaryRows = summary.map((s) => ({
-    'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id), Teacher: tName(s.class_id), 'Teacher ID': tCode(s.class_id),
+    'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id),
     Present: s.present, Late: s.late, Absent: s.absent, Excused: s.excused,
     'Sessions marked': s.total, 'Attendance %': pct(s.present + s.late, s.total),
   }));
   const dailyRows = daily.map((d) => ({
-    Date: d.att_date, Class: className(d.class_id), Group: groupOf(d.class_id), Teacher: tName(d.class_id), 'Teacher ID': tCode(d.class_id), Present: d.present, Late: d.late,
+    Date: d.att_date, Class: className(d.class_id), Group: groupOf(d.class_id), Present: d.present, Late: d.late,
     Absent: d.absent, Excused: d.excused, Marked: d.total, 'Attendance %': pct(d.present + d.late, d.total),
   }));
   const detailRows = (data?.att || []).map((a) => ({
