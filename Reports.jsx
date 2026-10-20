@@ -4,7 +4,7 @@ import { useQuery, fetchMyClasses } from './data.js';
 import { roleLabel } from './perms.js';
 import { today, formatDate, STATUS_LABELS, classDates } from './util.js';
 import { getSettings } from './settings.js';
-import { downloadExcel, downloadPdf } from './exports.js';
+import { downloadExcel, downloadPdf, saveBlob, makeZip } from './exports.js';
 
 // Supabase returns at most 1000 rows per request, so page through.
 async function fetchAll(build) {
@@ -251,6 +251,7 @@ export default function Reports({ profile }) {
   const [eachBusy, setEachBusy] = useState('');
   const [picked, setPicked] = useState(null);      // null = all teachers
   const [oneFile, setOneFile] = useState(false);   // false = one PDF per teacher
+  const [ready, setReady] = useState([]);          // the separate teacher PDFs, ready to save
   const chosen = teacherGroups.filter((g) => !picked || picked.includes(g.id));
   const teacherSection = (g, newPage) => {
     const tr = teacherRows.find((r) => r.Teacher === g.name) || {};
@@ -263,6 +264,7 @@ export default function Reports({ profile }) {
   };
   async function classReports() {
     if (!chosen.length) return;
+    setReady([]);
     if (oneFile || chosen.length === 1) {
       const one = chosen.length === 1;
       await downloadPdf(`class-report-${one ? chosen[0].name.replace(/[^\w]+/g, '-').toLowerCase() : 'teachers'}-${from}-to-${to}.pdf`, {
@@ -271,15 +273,18 @@ export default function Reports({ profile }) {
       });
       return;
     }
+    const files = [];
     for (const [k, g] of chosen.entries()) {
       setEachBusy(`${k + 1}/${chosen.length}`);
-      await downloadPdf(`class-report-${g.name.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}.pdf`, {
+      files.push({ teacher: g.name, ...(await downloadPdf(`class-report-${g.name.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}.pdf`, {
         title: `Class report — Teacher: ${g.name}`, subtitle: subtitleFor(),
-        tables: teacherSection(g, false),
-      });
-      await new Promise((r) => setTimeout(r, 700)); // let the browser save each file
+        tables: teacherSection(g, false), asBlob: true,
+      })) });
     }
     setEachBusy('');
+    setReady(files);
+    // Browsers allow only one automatic download, so all the teacher PDFs come in one .zip file.
+    saveBlob(await makeZip(files), `class-reports-${files.length}-teachers-${from}-to-${to}.zip`);
   }
 
   if (classes.loading) return <div className="spinner" />;
@@ -370,6 +375,14 @@ export default function Reports({ profile }) {
               {eachBusy ? `Preparing ${eachBusy}…` : chosen.length === 1 ? `Download class report — ${chosen[0].name}` : `Download class report${oneFile ? '' : 's'} (${chosen.length} teachers)`}
             </button>
           </div>
+          {ready.length > 0 && (
+            <div className="ready-files">
+              <p className="small muted">The {ready.length} PDFs were saved together in one <b>.zip</b> file. You can also save each one here:</p>
+              <div className="actions">
+                {ready.map((f) => <button key={f.name} className="btn ghost" onClick={() => saveBlob(f.blob, f.name)}>⬇ {f.teacher}</button>)}
+              </div>
+            </div>
+          )}
         </section>
       )}
 

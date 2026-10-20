@@ -798,3 +798,4 @@ tbody tr:hover td { background: #f8fafe; }
 .teacher-chip.on { border-color: var(--navy-2); background: #eef3fb; }
 .teacher-chip input { width: 18px; height: 18px; flex: none; }
 .teacher-chip small { display: block; color: var(--muted); font-size: .76rem; }
+.ready-files { margin-top: 12px; padding: 12px; border-radius: 12px; background: #f3f7f1; border: 1px dashed var(--line); }
