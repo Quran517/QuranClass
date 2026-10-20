@@ -28,7 +28,6 @@ export default function Reports({ profile }) {
   const [from, setFrom] = useState(() => classDates(getSettings().class_days, 8)[0] || today()); // last 8 class days
   const [to, setTo] = useState(today());
   const [view, setView] = useState('students');
-  const [separate, setSeparate] = useState(true);
   const [data, setData] = useState(null);
   const [err, setErr] = useState('');
   const [loading, setLoading] = useState(false);
@@ -50,10 +49,10 @@ export default function Reports({ profile }) {
     setLoading(true); setErr('');
     try {
       const [students, att] = await Promise.all([
-        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id')
+        fetchAll(() => supabase.from('students').select('id, full_name, student_code, class_id')
           .in('class_id', classIds).eq('status', 'approved').order('full_name')),
         fetchAll(() => supabase.from('attendance')
-          .select('id, student_id, class_id, att_date, status, method, students(full_name, student_code, admission_no)')
+          .select('id, student_id, class_id, att_date, status, method, students(full_name, student_code)')
           .in('class_id', classIds).gte('att_date', from).lte('att_date', to)
           .order('att_date', { ascending: false })),
       ]);
@@ -71,7 +70,7 @@ export default function Reports({ profile }) {
     const by = {};
     for (const s of data.students) by[s.id] = { ...s, present: 0, late: 0, absent: 0, excused: 0, total: 0 };
     for (const a of data.att) {
-      if (!by[a.student_id]) by[a.student_id] = { id: a.student_id, full_name: a.students?.full_name || '?', student_code: a.students?.student_code || '', admission_no: a.students?.admission_no || '', class_id: a.class_id, present: 0, late: 0, absent: 0, excused: 0, total: 0 };
+      if (!by[a.student_id]) by[a.student_id] = { id: a.student_id, full_name: a.students?.full_name || '?', student_code: a.students?.student_code || '', class_id: a.class_id, present: 0, late: 0, absent: 0, excused: 0, total: 0 };
       by[a.student_id][a.status] += 1;
       by[a.student_id].total += 1;
     }
@@ -95,7 +94,7 @@ export default function Reports({ profile }) {
   const fileBase = `attendance-${label.replace(/[^\w]+/g, '-').toLowerCase()}-${from}-to-${to}`;
 
   const summaryRows = summary.map((s) => ({
-    'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id), Teacher: teacherOf(s.class_id),
+    'Student ID': s.student_code, Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id), Teacher: teacherOf(s.class_id),
     Present: s.present, Late: s.late, Absent: s.absent, Excused: s.excused,
     'Sessions marked': s.total, 'Attendance %': pct(s.present + s.late, s.total),
   }));
@@ -104,7 +103,7 @@ export default function Reports({ profile }) {
     Absent: d.absent, Excused: d.excused, Marked: d.total, 'Attendance %': pct(d.present + d.late, d.total),
   }));
   const detailRows = (data?.att || []).map((a) => ({
-    Date: a.att_date, Class: className(a.class_id), Group: groupOf(a.class_id), Teacher: teacherOf(a.class_id), 'Student ID': a.students?.student_code || '', 'Adm No': a.students?.admission_no || '',
+    Date: a.att_date, Class: className(a.class_id), Group: groupOf(a.class_id), Teacher: teacherOf(a.class_id), 'Student ID': a.students?.student_code || '',
     Name: a.students?.full_name || '', Status: STATUS_LABELS[a.status], Method: a.method === 'qr' ? 'QR scan' : 'Manual',
   }));
 
@@ -134,25 +133,7 @@ export default function Reports({ profile }) {
     principal && `Principal: ${principal.full_name}`,
   ].filter(Boolean).join('   ·   ');
 
-  const perClass = classId === 'all' && separate && classIds.length > 1;
-  const sheetName = (name, used) => { let n = (name || 'Class').replace(/[\\/?*[\]:]/g, ' ').slice(0, 28); let k = n, i = 2; while (used.has(k)) k = `${n.slice(0, 25)} ${i++}`; used.add(k); return k; };
-  const strip = (r) => { const { Class, Group, Teacher, ...rest } = r; return rest; }; // eslint-disable-line no-unused-vars
-
   function excel() {
-    if (perClass) {
-      const used = new Set(['Classes & teachers', 'Staff', 'All records', 'Daily summary']);
-      downloadExcel(fileBase + '.xlsx', [
-        { name: 'Classes & teachers', rows: classRows },
-        ...classIds.map((id) => ({
-          name: sheetName(className(id), used),
-          rows: summaryRows.filter((r, i) => summary[i].class_id === id).map(strip),
-        })),
-        { name: 'Daily summary', rows: dailyRows },
-        { name: 'Staff', rows: staffRows },
-        { name: 'All records', rows: detailRows },
-      ]);
-      return;
-    }
     downloadExcel(fileBase + '.xlsx', [
       { name: 'Student summary', rows: summaryRows },
       { name: 'Daily summary', rows: dailyRows },
@@ -168,30 +149,6 @@ export default function Reports({ profile }) {
     const d = dailyRows.length ? toTable(dailyRows) : { columns: ['Date'], rows: [] };
     const c = classRows.length ? toTable(classRows) : { columns: ['Class'], rows: [] };
     const st = staffRows.length ? toTable(staffRows) : { columns: ['Name'], rows: [] };
-    if (perClass) {
-      const sections = classIds.flatMap((id) => {
-        const sRows = summaryRows.filter((r, i) => summary[i].class_id === id).map(strip);
-        const dRows = dailyRows.filter((r, i) => daily[i].class_id === id).map(strip);
-        const cr = classRows.find((r) => r.Class === className(id));
-        return [
-          { newPage: true, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
-            sectionNote: [`Teacher: ${teacherOf(id) || '—'}`, principal && `Principal: ${principal.full_name}`, `Period: ${period}`, cr && `Students: ${cr.Students} · Attendance: ${cr['Attendance %']}%`].filter(Boolean).join('   ·   '),
-            heading: 'Student summary', compact: true, ...(sRows.length ? toTable(sRows) : { columns: ['Student'], rows: [] }) },
-          { heading: 'Daily summary', compact: true, ...(dRows.length ? toTable(dRows) : { columns: ['Date'], rows: [] }) },
-          { signatures: [`Class Teacher${teacherOf(id) ? ': ' + teacherOf(id) : ''}`, `Principal${principal ? ': ' + principal.full_name : ''}`, 'Admin / Date'] },
-        ];
-      });
-      downloadPdf(fileBase + '.pdf', {
-        title: `Attendance report — ${label} (each class separately)`,
-        subtitle: headerLine,
-        tables: [
-          { heading: 'Classes, groups & teachers', ...c },
-          { heading: 'Principal & staff', ...st },
-          ...sections,
-        ],
-      });
-      return;
-    }
     downloadPdf(fileBase + '.pdf', {
       title: `Attendance report — ${label}`,
       subtitle: headerLine,
@@ -229,9 +186,6 @@ export default function Reports({ profile }) {
           <label className="inline">To <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} /></label>
         </div>
         <div className="actions">
-          {classId === 'all' && classIds.length > 1 && (
-            <label className="inline small"><input type="checkbox" checked={separate} onChange={(e) => setSeparate(e.target.checked)} /> Each class separately (own page in PDF, own sheet in Excel)</label>
-          )}
           <button className="btn" onClick={excel} disabled={!data || loading}>Download Excel</button>
           <button className="btn ghost" onClick={pdf} disabled={!data || loading}>Download PDF</button>
         </div>
@@ -267,7 +221,7 @@ export default function Reports({ profile }) {
                     const p = pct(s.present + s.late, s.total);
                     return (
                       <tr key={s.id}>
-                        <td>{s.full_name}<div className="small muted">{s.student_code}{s.admission_no ? ` · Adm ${s.admission_no}` : ''}</div></td>
+                        <td>{s.full_name}<div className="small muted">{s.student_code}</div></td>
                         {classId === 'all' && <td className="small">{className(s.class_id)}</td>}
                         <td>{s.present}</td><td>{s.late}</td><td>{s.absent}</td><td>{s.excused}</td>
                         <td><b className={s.total && p < 75 ? 'low' : ''}>{s.total ? p + '%' : '—'}</b></td>
