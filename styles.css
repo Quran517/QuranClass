@@ -831,4 +831,4 @@ tbody tr:hover td { background: #f8fafe; }
 }
 .idcard-photo.icon { border-style: solid; border-color: #e6dccb; background: #fff; overflow: hidden; justify-content: flex-end; padding: 0; }
 .idcard.girl .idcard-photo.icon { border-color: #f2c6d2; background: #fff; }
-.idcard-avatar { width: 92%; height: auto; display: block; }
+.idcard-avatar { width: 88%; height: auto; display: block; margin: 0 auto; }
