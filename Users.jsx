@@ -7,6 +7,15 @@ import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
 import { AREAS, ASSISTANT_PERMS, PRINCIPAL_PERMS, roleLabel } from './perms.js';
 
+// 0551234567 style: digits only, Saudi numbers start with 0
+function localPhone(p) {
+  let d = String(p || '').replace(/\D/g, '');
+  if (d.startsWith('00')) d = d.slice(2);
+  if (d.startsWith('966') && d.length === 12) d = '0' + d.slice(3);
+  if (d.length === 9 && d.startsWith('5')) d = '0' + d;
+  return d.length >= 7 ? d : '';
+}
+
 function makePassword() {
   const words = ['Noor', 'Huda', 'Iqra', 'Sabr', 'Ilm', 'Amal', 'Rahma', 'Taqwa'];
   return words[Math.floor(Math.random() * words.length)] + (1000 + Math.floor(Math.random() * 9000));
@@ -29,7 +38,7 @@ function loginMessage({ full_name, email, password, role, staff_code, student_co
 
 export default function Users({ me }) {
   const list = useQuery(() => supabase.from('profiles').select('*').order('created_at', { ascending: false }));
-  const linked = useQuery(() => supabase.from('students').select('profile_id, student_code').not('profile_id', 'is', null));
+  const linked = useQuery(() => supabase.from('students').select('profile_id, student_code, full_name, guardian_phone, whatsapp').not('profile_id', 'is', null));
   const studentCode = Object.fromEntries((linked.data || []).map((s) => [s.profile_id, s.student_code]));
   const freeStudents = useQuery(() =>
     supabase.from('students').select('id, full_name, student_code, email, guardian_phone, whatsapp, class_id, status')
@@ -82,6 +91,24 @@ export default function Users({ me }) {
     }
     if (error) setErr(/last admin/.test(error.message) ? 'This is the last admin — make someone else admin first.' : error.message);
     else { setSaved(`${p.full_name || p.email} is now ${choice === 'assistant' ? 'an Admin assistant' : choice === 'principal' ? 'the Principal' : newRole}.`); list.reload(); }
+  }
+
+  // Existing student logins without a username: let them sign in with the parent's mobile number.
+  const studentProfiles = new Map((list.data || []).filter((p) => p.role === 'student').map((p) => [p.id, p]));
+  const noPhoneLogin = (linked.data || []).filter((s) => studentProfiles.get(s.profile_id) && !studentProfiles.get(s.profile_id).username && localPhone(s.guardian_phone || s.whatsapp));
+  async function phoneUsernames() {
+    if (!window.confirm(`Let ${noPhoneLogin.length} students sign in with their parent's mobile number? Brothers and sisters get -2, -3 after the number. Their passwords do not change.`)) return;
+    setBusy(true); setErr(''); setSaved('');
+    let ok = 0;
+    for (const s of noPhoneLogin) {
+      const mobile = localPhone(s.guardian_phone || s.whatsapp);
+      for (let n = 1; n <= 9; n++) {
+        const { error } = await supabase.from('profiles').update({ username: n === 1 ? mobile : `${mobile}-${n}` }).eq('id', s.profile_id);
+        if (!error) { ok++; break; }
+        if (!/unique|duplicate|already/i.test(error.message)) { setErr(error.message); break; }
+      }
+    }
+    setBusy(false); setSaved(`${ok} students can now sign in with their parent's mobile number (see the Username column).`); list.reload();
   }
 
   async function removeLogin(p) {
@@ -211,6 +238,9 @@ export default function Users({ me }) {
           <button className="btn" onClick={() => openCreate('teacher')}>+ Create teacher login</button>
           <button className="btn ghost" onClick={() => openCreate('student')}>+ Create student login</button>
           <button className="btn ghost" onClick={() => openCreate('parent')}>+ Create parent login</button>
+          {noPhoneLogin.length > 0 && (
+            <button className="btn ghost" onClick={phoneUsernames} disabled={busy}>Parent mobile as sign-in for {noPhoneLogin.length} student login{noPhoneLogin.length === 1 ? '' : 's'}</button>
+          )}
           {(freeStudents.data || []).length > 0 && (
             <button className="btn ghost" onClick={() => setBulk(true)}>+ Student logins for many ({freeStudents.data.length} without a login)</button>
           )}
@@ -497,8 +527,11 @@ function BulkStudentLogins({ students, classes, onClose }) {
   const [classId, setClassId] = useState('all');
   const [off, setOff] = useState(new Set());
   const [busy, setBusy] = useState('');
-  const [done, setDone] = useState(null); // [{ student, password, error }]
+  const [done, setDone] = useState(null); // [{ student, password, username, error }]
+  const [signIn, setSignIn] = useState('phone'); // 'phone' = parent's mobile number, 'id' = Student ID only
+  const [pwMode, setPwMode] = useState('random'); // 'random' or 'phone'
   const cls = (id) => classes.find((c) => c.id === id);
+  const parentPhone = (s) => s.guardian_phone || s.whatsapp || '';
   const shown = students.filter((s) => classId === 'all' || (classId === 'none' ? !s.class_id : s.class_id === classId));
   const picked = shown.filter((s) => !off.has(s.id));
 
@@ -506,25 +539,44 @@ function BulkStudentLogins({ students, classes, onClose }) {
     const out = [];
     for (const [k, s] of picked.entries()) {
       setBusy(`${k + 1} of ${picked.length}`);
-      const password = makePassword();
-      const args = { p_email: s.email || '', p_password: password, p_full_name: s.full_name, p_phone: s.whatsapp || s.guardian_phone || null, p_role: 'student', p_student_id: s.id };
-      let { error } = await supabase.rpc('admin_create_user', args);
-      if (error && /already exists/i.test(error.message) && args.p_email) ({ error } = await supabase.rpc('admin_create_user', { ...args, p_email: '' }));
-      out.push({ s, password, error: error?.message || '' });
+      const mobile = localPhone(parentPhone(s));
+      const password = pwMode === 'phone' && mobile.length >= 6 ? mobile : makePassword();
+      const args = { p_email: s.email || '', p_password: password, p_full_name: s.full_name, p_phone: parentPhone(s) || null, p_role: 'student', p_student_id: s.id };
+      let { data, error } = await supabase.rpc('admin_create_user', args);
+      if (error && /already exists/i.test(error.message) && args.p_email) ({ data, error } = await supabase.rpc('admin_create_user', { ...args, p_email: '' }));
+      let username = '', note = '';
+      if (!error && signIn === 'phone' && mobile && data?.id) {
+        // brothers and sisters share the parent's number: the 2nd gets 0551234567-2, the 3rd -3 …
+        for (let n = 1; n <= 9 && !username; n++) {
+          const u = n === 1 ? mobile : `${mobile}-${n}`;
+          const { error: e2 } = await supabase.from('profiles').update({ username: u }).eq('id', data.id);
+          if (!e2) username = u;
+          else if (!/unique|duplicate|already/i.test(e2.message)) { note = e2.message; break; }
+        }
+      } else if (!error && signIn === 'phone' && !mobile) note = 'no parent mobile number — sign in with the Student ID';
+      out.push({ s, password, username, note, error: error?.message || '' });
     }
     setBusy(''); setDone(out);
   }
   const ok = (done || []).filter((r) => !r.error);
-  const rows = () => ok.map(({ s, password }) => ({ 'Student ID (sign-in)': s.student_code, Name: s.full_name, Class: s.class_id ? classTag(cls(s.class_id)) : '', Password: password, Phone: s.whatsapp || s.guardian_phone || '' }));
-  const msg = (s, password) => loginMessage({ full_name: s.full_name, email: '', password, role: 'student', student_code: s.student_code, phone: s.whatsapp || s.guardian_phone });
+  const rows = () => ok.map(({ s, password, username }) => ({ 'Sign in with': username || s.student_code, 'Student ID': s.student_code, Name: s.full_name, Class: s.class_id ? classTag(cls(s.class_id)) : '', Password: password, 'Parent mobile': parentPhone(s) }));
+  const msg = (s, password, username) => loginMessage({ full_name: s.full_name, email: '', password, role: 'student', student_code: s.student_code, username, phone: parentPhone(s) });
   const stamp = new Date().toISOString().slice(0, 10);
 
   return (
     <Modal title={done ? `Student logins created (${ok.length})` : 'Create student logins'} onClose={busy ? () => {} : onClose}>
       {!done ? (
         <>
-          <p className="small muted">Each student signs in with their <b>Student ID</b> (for example QC1001) and a new password. You'll see all the passwords at the end to send on WhatsApp or print.</p>
+          <p className="small muted">Choose how students sign in. They can always also use their <b>Student ID</b> (for example QC1001). You'll see every login at the end to send on WhatsApp or print.</p>
           <div className="filters">
+            <select value={signIn} onChange={(e) => setSignIn(e.target.value)} aria-label="Sign in with">
+              <option value="phone">Sign in with the parent's mobile number</option>
+              <option value="id">Sign in with the Student ID only</option>
+            </select>
+            <select value={pwMode} onChange={(e) => setPwMode(e.target.value)} aria-label="Password">
+              <option value="random">Password: a new password for each student</option>
+              <option value="phone">Password: the parent's mobile number</option>
+            </select>
             <select value={classId} onChange={(e) => setClassId(e.target.value)} aria-label="Class">
               <option value="all">All classes</option>
               {classes.map((c) => <option key={c.id} value={c.id}>{classTag(c)}</option>)}
@@ -540,12 +592,13 @@ function BulkStudentLogins({ students, classes, onClose }) {
                 <label key={s.id} className="pick-row">
                   <input type="checkbox" checked={!off.has(s.id)} onChange={(e) => { const n = new Set(off); if (e.target.checked) n.delete(s.id); else n.add(s.id); setOff(n); }} />
                   <span className="pick-name"><b>{s.full_name}</b> <span className="muted">{s.student_code}</span></span>
-                  <span className="pick-meta small muted">{s.class_id ? classTag(cls(s.class_id)) : 'No class'}{s.status === 'pending' ? ' · pending admission' : ''}</span>
+                  <span className="pick-meta small muted">{s.class_id ? classTag(cls(s.class_id)) : 'No class'}{s.status === 'pending' ? ' · pending admission' : ''} · {localPhone(parentPhone(s)) || <b className="low">no parent mobile</b>}</span>
                 </label>
               ))}
               {!shown.length && <p className="muted small" style={{ padding: 12 }}>Every student here already has a login.</p>}
             </div>
           </div>
+          {signIn === 'phone' && <p className="small muted">Brothers and sisters share the parent's number: the second child signs in with <b>0551234567-2</b>, the third with <b>-3</b>. A parent who also has a parent login should sign in with their Parent ID (PR…).</p>}
           <div className="actions">
             <button className="btn" onClick={run} disabled={!picked.length || !!busy}>{busy ? `Creating ${busy}…` : `Create ${picked.length} login${picked.length === 1 ? '' : 's'}`}</button>
             <button className="btn ghost" onClick={onClose} disabled={!!busy}>Cancel</button>
@@ -560,13 +613,13 @@ function BulkStudentLogins({ students, classes, onClose }) {
           </div>
           <div className="pick-list">
             <div className="pick-body">
-              {done.map(({ s, password, error }) => (
+              {done.map(({ s, password, username, note, error }) => (
                 <div key={s.id} className="pick-row">
                   <span className="pick-name"><b>{s.full_name}</b> <span className="muted">{s.student_code}</span></span>
                   {error ? <span className="pick-meta small low">Not created: {error}</span> : (
-                    <span className="pick-meta small">Password: <code>{password}</code>{' '}
+                    <span className="pick-meta small">Sign in: <b>{username || s.student_code}</b> · Password: <code>{password}</code>{note ? <span className="muted"> ({note})</span> : null}{' '}
                       {whatsappLink(s.whatsapp || s.guardian_phone, 'x')
-                        ? <a className="btn whatsapp small" target="_blank" rel="noreferrer" href={whatsappLink(s.whatsapp || s.guardian_phone, msg(s, password))}>WhatsApp</a>
+                        ? <a className="btn whatsapp small" target="_blank" rel="noreferrer" href={whatsappLink(s.whatsapp || s.guardian_phone, msg(s, password, username))}>WhatsApp</a>
                         : <span className="muted">no phone</span>}
                     </span>
                   )}

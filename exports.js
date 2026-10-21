@@ -1,18 +1,28 @@
 import { getSettings, getLogo } from './settings.js';
 import { code128Widths } from './barcode.js';
 
-// Load the logo as a PNG data URL for the PDF (works for the built-in or an uploaded logo).
+// Load the logo as a round PNG for PDFs (works for the built-in or an uploaded logo).
+// A square logo with a white background is cut to a circle and given a gold ring,
+// so it looks the same on the dark PDF header.
 async function logoData() {
   try {
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.src = getLogo();
     await img.decode();
+    const N = 320, R = N / 2, ring = 9;
     const c = document.createElement('canvas');
-    c.width = c.height = 160;
+    c.width = c.height = N;
     const ctx = c.getContext('2d');
-    const r = Math.min(160 / img.width, 160 / img.height);
-    ctx.drawImage(img, (160 - img.width * r) / 2, (160 - img.height * r) / 2, img.width * r, img.height * r);
+    ctx.imageSmoothingQuality = 'high';
+    ctx.beginPath(); ctx.arc(R, R, R - 1, 0, Math.PI * 2); ctx.fillStyle = '#fff'; ctx.fill();
+    ctx.save();
+    ctx.beginPath(); ctx.arc(R, R, R - ring, 0, Math.PI * 2); ctx.clip();
+    // fill the circle with the logo (centre of the picture)
+    const inner = (R - ring) * 2, r = Math.max(inner / img.width, inner / img.height);
+    ctx.drawImage(img, R - (img.width * r) / 2, R - (img.height * r) / 2, img.width * r, img.height * r);
+    ctx.restore();
+    ctx.beginPath(); ctx.arc(R, R, R - ring / 2, 0, Math.PI * 2); ctx.lineWidth = ring; ctx.strokeStyle = '#c9a86a'; ctx.stroke();
     return c.toDataURL('image/png');
   } catch {
     return null;
@@ -52,7 +62,7 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
   doc.setFontSize(16);
   const logo = await logoData();
   const tx = logo ? 92 : 40;
-  if (logo) doc.addImage(logo, 'PNG', 36, 8, 48, 48);
+  if (logo) doc.addImage(logo, 'PNG', 34, 6, 52, 52);
   doc.text(`${getSettings().school_name}${getSettings().academic_year ? ' · ' + getSettings().academic_year : ''}`, tx, 30);
   doc.setFontSize(11);
   doc.text(title, tx, 50);

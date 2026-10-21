@@ -825,3 +825,7 @@ tbody tr:hover td { background: #f8fafe; }
 .pick-row input, .pick-head input { width: 18px; height: 18px; flex: none; }
 .pick-name { min-width: 200px; }
 .pick-meta { flex: 1; }
+/* every logo shows as a neat circle (also an uploaded square logo with a white background) */
+.auth-logo, .cert-logo, .dash-hero-logo:not(.photo), .idcard-logo, .side-brand img, .appbar-logo, .logo-preview {
+  border-radius: 50% !important; object-fit: cover; background: #fff; box-shadow: 0 0 0 2px var(--gold, #c9a86a); aspect-ratio: 1 / 1;
+}
