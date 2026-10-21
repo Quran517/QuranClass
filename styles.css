@@ -811,3 +811,17 @@ tbody tr:hover td { background: #f8fafe; }
 .side-item.active { box-shadow: inset 3px 0 0 var(--gold); }
 .card { border-color: var(--line); }
 .badge.ok, .pill.ok { background: #e7f0e8; color: var(--leaf); }
+.type-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 12px 0; }
+.type-chip { flex-direction: row; align-items: center; gap: 6px; margin: 0; padding: 7px 12px; border: 1.5px solid var(--line); border-radius: 999px; background: #fff; font-weight: 600; font-size: .86rem; cursor: pointer; }
+.type-chip.on { border-color: var(--navy-2); background: #f4efe4; }
+.type-chip input { width: 16px; height: 16px; }
+.type-chip small { color: var(--muted); font-weight: 500; }
+.pick-list { border: 1px solid var(--line); border-radius: 12px; margin-top: 12px; overflow: hidden; }
+.pick-head { padding: 10px 14px; background: #fbf8f2; border-bottom: 1px solid var(--line); }
+.pick-head label, .pick-row { flex-direction: row; align-items: center; gap: 10px; margin: 0; font-weight: 400; cursor: pointer; }
+.pick-body { max-height: 380px; overflow: auto; }
+.pick-row { padding: 9px 14px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+.pick-row:last-child { border-bottom: 0; }
+.pick-row input, .pick-head input { width: 18px; height: 18px; flex: none; }
+.pick-name { min-width: 200px; }
+.pick-meta { flex: 1; }

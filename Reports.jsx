@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
-import { roleLabel } from './perms.js';
+import { roleLabel, can } from './perms.js';
+import UsersReport from './UsersReport.jsx';
 import { today, formatDate, STATUS_LABELS, classDates } from './util.js';
 import { getSettings } from './settings.js';
 import { downloadExcel, downloadPdf, saveBlob, makeZip } from './exports.js';
@@ -463,6 +464,7 @@ export default function Reports({ profile }) {
         )}
         <p className="small muted">P = present, L = late, A = absent, E = excused. Late counts as attended.</p>
       </section>
+      {can(profile, 'users') && <UsersReport />}
     </>
   );
 }

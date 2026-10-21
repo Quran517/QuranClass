@@ -61,6 +61,7 @@ export default function Account({ profile, onSaved }) {
           <div className="span2"><button className="btn">Save details</button></div>
         </form>
       </section>
+      {profile.role === 'student' && <MyStudentDetails profile={profile} />}
       <section className="card">
         <h2>Username</h2>
         <p className="small muted">Choose a name to sign in with — for example your phone number (0551234567) or a short name (ahmed.k). Letters, numbers and . _ + - only.</p>
@@ -77,5 +78,52 @@ export default function Account({ profile, onSaved }) {
         </form>
       </section>
     </>
+  );
+}
+
+// Students keep their own contact details up to date.
+function MyStudentDetails({ profile }) {
+  const [s, setS] = useState(null);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    supabase.from('students').select('full_name, student_code, admission_no, guardian_name, guardian_phone, whatsapp, email, address, school_grade, date_of_birth, gender, status')
+      .eq('profile_id', profile.id).maybeSingle().then(({ data }) => setS(data || false));
+  }, [profile.id]);
+  if (s === null) return null;
+  if (!s) return null;
+  const set = (k) => (e) => setS({ ...s, [k]: e.target.value });
+  async function save(e) {
+    e.preventDefault(); setMsg(''); setErr(''); setBusy(true);
+    const { error } = await supabase.rpc('update_my_details', {
+      p_guardian_name: s.guardian_name || '', p_guardian_phone: s.guardian_phone || '', p_whatsapp: s.whatsapp || '',
+      p_email: s.email || '', p_address: s.address || '', p_school_grade: s.school_grade || '',
+    });
+    setBusy(false);
+    if (error) setErr(/update_my_details/.test(error.message) ? 'This needs a database update — please ask the admin to run update-24.sql.' : error.message);
+    else setMsg('Your details were updated.');
+  }
+  return (
+    <section className="card">
+      <h2>My student details</h2>
+      <dl className="details">
+        <dt>Name</dt><dd>{s.full_name}</dd>
+        <dt>Student ID</dt><dd><b>{s.student_code}</b></dd>
+        {s.admission_no && <><dt>Admission no.</dt><dd>{s.admission_no}</dd></>}
+      </dl>
+      <p className="small muted">Keep your contact details up to date. Your name, class and Student ID can only be changed by the school.</p>
+      {err && <p className="error">{err}</p>}
+      {msg && <p className="success">{msg}</p>}
+      <form className="form-grid" onSubmit={save}>
+        <label>Parent / guardian name<input value={s.guardian_name || ''} onChange={set('guardian_name')} /></label>
+        <label>Parent / guardian phone<input inputMode="tel" value={s.guardian_phone || ''} onChange={set('guardian_phone')} /></label>
+        <label>WhatsApp number<input inputMode="tel" value={s.whatsapp || ''} onChange={set('whatsapp')} /></label>
+        <label>Email<input type="email" value={s.email || ''} onChange={set('email')} /></label>
+        <label>School grade<input value={s.school_grade || ''} onChange={set('school_grade')} /></label>
+        <label className="span2">Address<input value={s.address || ''} onChange={set('address')} /></label>
+        <div className="span2"><button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Update my details'}</button></div>
+      </form>
+    </section>
   );
 }

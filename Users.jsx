@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery } from './data.js';
-import { formatDate, whatsappLink, realEmail, cleanUsername, USERNAME_RULE, usernameError } from './util.js';
+import { formatDate, whatsappLink, realEmail, cleanUsername, USERNAME_RULE, usernameError, classTag } from './util.js';
+import { downloadExcel, downloadPdf } from './exports.js';
 import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
 import { AREAS, ASSISTANT_PERMS, PRINCIPAL_PERMS, roleLabel } from './perms.js';
@@ -31,7 +32,7 @@ export default function Users({ me }) {
   const linked = useQuery(() => supabase.from('students').select('profile_id, student_code').not('profile_id', 'is', null));
   const studentCode = Object.fromEntries((linked.data || []).map((s) => [s.profile_id, s.student_code]));
   const freeStudents = useQuery(() =>
-    supabase.from('students').select('id, full_name, student_code, email, guardian_phone, whatsapp')
+    supabase.from('students').select('id, full_name, student_code, email, guardian_phone, whatsapp, class_id, status')
       .is('profile_id', null).neq('status', 'rejected').order('full_name'));
   const [q, setQ] = useState('');
   const [role, setRole] = useState('');
@@ -43,7 +44,9 @@ export default function Users({ me }) {
   const [busy, setBusy] = useState(false);
   const [access, setAccess] = useState(null); // { profile, picked: Set }
   const [kids, setKids] = useState(null);     // parent profile whose children are shown
+  const [bulk, setBulk] = useState(false);    // create many student logins
   const allStudents = useQuery(() => supabase.from('students').select('id, full_name, student_code, guardian_name, guardian_phone, whatsapp, email').neq('status', 'rejected').order('full_name'));
+  const classList = useQuery(() => supabase.from('classes').select('id, name, group_name').order('name'));
   const pendingLinks = useQuery(() => supabase.from('parent_links').select('id, parent_id').eq('verified', false));
   const meAdmin = me.role === 'admin';
 
@@ -208,6 +211,9 @@ export default function Users({ me }) {
           <button className="btn" onClick={() => openCreate('teacher')}>+ Create teacher login</button>
           <button className="btn ghost" onClick={() => openCreate('student')}>+ Create student login</button>
           <button className="btn ghost" onClick={() => openCreate('parent')}>+ Create parent login</button>
+          {(freeStudents.data || []).length > 0 && (
+            <button className="btn ghost" onClick={() => setBulk(true)}>+ Student logins for many ({freeStudents.data.length} without a login)</button>
+          )}
         </div>
       </div>
       <p className="muted small">
@@ -406,6 +412,10 @@ export default function Users({ me }) {
         </Modal>
       )}
 
+      {bulk && (
+        <BulkStudentLogins students={freeStudents.data || []} classes={classList.data || []}
+          onClose={() => { setBulk(false); list.reload(); linked.reload(); freeStudents.reload(); }} />
+      )}
       {created && (
         <Modal title={created.reset ? 'Password changed' : 'Login created'} onClose={() => setCreated(null)}>
           <dl className="details">
@@ -477,6 +487,96 @@ function ParentLinks({ parent, students, onClose }) {
         </select>
         <button className="btn" disabled={!add} onClick={() => { run(supabase.from('parent_links').insert({ parent_id: parent.id, student_id: add, verified: true })); setAdd(''); }}>Link (verified)</button>
       </div>
+    </Modal>
+  );
+}
+
+// Create logins for many students at once. Each student signs in with their
+// Student ID (e.g. QC1001) and the password shown here.
+function BulkStudentLogins({ students, classes, onClose }) {
+  const [classId, setClassId] = useState('all');
+  const [off, setOff] = useState(new Set());
+  const [busy, setBusy] = useState('');
+  const [done, setDone] = useState(null); // [{ student, password, error }]
+  const cls = (id) => classes.find((c) => c.id === id);
+  const shown = students.filter((s) => classId === 'all' || (classId === 'none' ? !s.class_id : s.class_id === classId));
+  const picked = shown.filter((s) => !off.has(s.id));
+
+  async function run() {
+    const out = [];
+    for (const [k, s] of picked.entries()) {
+      setBusy(`${k + 1} of ${picked.length}`);
+      const password = makePassword();
+      const args = { p_email: s.email || '', p_password: password, p_full_name: s.full_name, p_phone: s.whatsapp || s.guardian_phone || null, p_role: 'student', p_student_id: s.id };
+      let { error } = await supabase.rpc('admin_create_user', args);
+      if (error && /already exists/i.test(error.message) && args.p_email) ({ error } = await supabase.rpc('admin_create_user', { ...args, p_email: '' }));
+      out.push({ s, password, error: error?.message || '' });
+    }
+    setBusy(''); setDone(out);
+  }
+  const ok = (done || []).filter((r) => !r.error);
+  const rows = () => ok.map(({ s, password }) => ({ 'Student ID (sign-in)': s.student_code, Name: s.full_name, Class: s.class_id ? classTag(cls(s.class_id)) : '', Password: password, Phone: s.whatsapp || s.guardian_phone || '' }));
+  const msg = (s, password) => loginMessage({ full_name: s.full_name, email: '', password, role: 'student', student_code: s.student_code, phone: s.whatsapp || s.guardian_phone });
+  const stamp = new Date().toISOString().slice(0, 10);
+
+  return (
+    <Modal title={done ? `Student logins created (${ok.length})` : 'Create student logins'} onClose={busy ? () => {} : onClose}>
+      {!done ? (
+        <>
+          <p className="small muted">Each student signs in with their <b>Student ID</b> (for example QC1001) and a new password. You'll see all the passwords at the end to send on WhatsApp or print.</p>
+          <div className="filters">
+            <select value={classId} onChange={(e) => setClassId(e.target.value)} aria-label="Class">
+              <option value="all">All classes</option>
+              {classes.map((c) => <option key={c.id} value={c.id}>{classTag(c)}</option>)}
+              <option value="none">No class yet</option>
+            </select>
+          </div>
+          <div className="pick-list">
+            <div className="pick-head"><label><input type="checkbox" checked={picked.length === shown.length && shown.length > 0}
+              onChange={(e) => { const n = new Set(off); shown.forEach((s) => (e.target.checked ? n.delete(s.id) : n.add(s.id))); setOff(n); }} />
+              <b>{picked.length} of {shown.length} selected</b></label></div>
+            <div className="pick-body">
+              {shown.map((s) => (
+                <label key={s.id} className="pick-row">
+                  <input type="checkbox" checked={!off.has(s.id)} onChange={(e) => { const n = new Set(off); if (e.target.checked) n.delete(s.id); else n.add(s.id); setOff(n); }} />
+                  <span className="pick-name"><b>{s.full_name}</b> <span className="muted">{s.student_code}</span></span>
+                  <span className="pick-meta small muted">{s.class_id ? classTag(cls(s.class_id)) : 'No class'}{s.status === 'pending' ? ' · pending admission' : ''}</span>
+                </label>
+              ))}
+              {!shown.length && <p className="muted small" style={{ padding: 12 }}>Every student here already has a login.</p>}
+            </div>
+          </div>
+          <div className="actions">
+            <button className="btn" onClick={run} disabled={!picked.length || !!busy}>{busy ? `Creating ${busy}…` : `Create ${picked.length} login${picked.length === 1 ? '' : 's'}`}</button>
+            <button className="btn ghost" onClick={onClose} disabled={!!busy}>Cancel</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="small muted">Send each student their details now — the passwords are not shown again. They sign in with the Student ID and can change the password under "Account".</p>
+          <div className="actions">
+            <button className="btn" disabled={!ok.length} onClick={() => downloadPdf(`student-logins-${stamp}.pdf`, { title: 'Student logins', subtitle: `Website: ${window.location.origin}   ·   Sign in with the Student ID and password`, orientation: 'portrait', tables: [{ heading: `${ok.length} students`, columns: Object.keys(rows()[0] || {}), rows: rows().map((r) => Object.values(r)) }] })}>Download PDF</button>
+            <button className="btn ghost" disabled={!ok.length} onClick={() => downloadExcel(`student-logins-${stamp}.xlsx`, [{ name: 'Student logins', rows: rows() }])}>Excel</button>
+          </div>
+          <div className="pick-list">
+            <div className="pick-body">
+              {done.map(({ s, password, error }) => (
+                <div key={s.id} className="pick-row">
+                  <span className="pick-name"><b>{s.full_name}</b> <span className="muted">{s.student_code}</span></span>
+                  {error ? <span className="pick-meta small low">Not created: {error}</span> : (
+                    <span className="pick-meta small">Password: <code>{password}</code>{' '}
+                      {whatsappLink(s.whatsapp || s.guardian_phone, 'x')
+                        ? <a className="btn whatsapp small" target="_blank" rel="noreferrer" href={whatsappLink(s.whatsapp || s.guardian_phone, msg(s, password))}>WhatsApp</a>
+                        : <span className="muted">no phone</span>}
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="actions"><button className="btn ghost" onClick={onClose}>Close</button></div>
+        </>
+      )}
     </Modal>
   );
 }
