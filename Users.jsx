@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery } from './data.js';
 import { formatDate, whatsappLink, realEmail, cleanUsername, USERNAME_RULE, usernameError, classTag } from './util.js';
@@ -54,6 +54,7 @@ export default function Users({ me }) {
   const [access, setAccess] = useState(null); // { profile, picked: Set }
   const [kids, setKids] = useState(null);     // parent profile whose children are shown
   const [bulk, setBulk] = useState(false);    // create many student logins
+  const [families, setFamilies] = useState(false); // one parent login per guardian phone
   const allStudents = useQuery(() => supabase.from('students').select('id, full_name, student_code, guardian_name, guardian_phone, whatsapp, email').neq('status', 'rejected').order('full_name'));
   const classList = useQuery(() => supabase.from('classes').select('id, name, group_name').order('name'));
   const pendingLinks = useQuery(() => supabase.from('parent_links').select('id, parent_id').eq('verified', false));
@@ -241,6 +242,7 @@ export default function Users({ me }) {
           {noPhoneLogin.length > 0 && (
             <button className="btn ghost" onClick={phoneUsernames} disabled={busy}>Parent mobile as sign-in for {noPhoneLogin.length} student login{noPhoneLogin.length === 1 ? '' : 's'}</button>
           )}
+          <button className="btn ghost" onClick={() => setFamilies(true)}>+ Parent logins by guardian phone</button>
           {(freeStudents.data || []).length > 0 && (
             <button className="btn ghost" onClick={() => setBulk(true)}>+ Student logins for many ({freeStudents.data.length} without a login)</button>
           )}
@@ -442,6 +444,10 @@ export default function Users({ me }) {
         </Modal>
       )}
 
+      {families && (
+        <BulkParentLogins students={allStudents.data || []} profiles={list.data || []} linkedStudents={linked.data || []}
+          onClose={() => { setFamilies(false); list.reload(); linked.reload(); pendingLinks.reload(); }} />
+      )}
       {bulk && (
         <BulkStudentLogins students={freeStudents.data || []} classes={classList.data || []}
           onClose={() => { setBulk(false); list.reload(); linked.reload(); freeStudents.reload(); }} />
@@ -627,6 +633,147 @@ function BulkStudentLogins({ students, classes, onClose }) {
               ))}
             </div>
           </div>
+          <div className="actions"><button className="btn ghost" onClick={onClose}>Close</button></div>
+        </>
+      )}
+    </Modal>
+  );
+}
+
+// One parent login for each guardian phone number. Brothers and sisters with the
+// same guardian phone are all linked to that one parent, who sees every child.
+function BulkParentLogins({ students, profiles, linkedStudents, onClose }) {
+  const [links, setLinks] = useState(null);
+  const [off, setOff] = useState(new Set());
+  const [pwMode, setPwMode] = useState('random');
+  const [freeNumber, setFreeNumber] = useState(true);
+  const [busy, setBusy] = useState('');
+  const [done, setDone] = useState(null);
+  const [q, setQ] = useState('');
+  useEffect(() => { supabase.from('parent_links').select('parent_id, student_id').then(({ data }) => setLinks(data || [])); }, []);
+
+  const parents = profiles.filter((p) => p.role === 'parent');
+  const fams = useMemo(() => {
+    const m = new Map();
+    for (const s of students) {
+      const mobile = localPhone(s.guardian_phone || s.whatsapp);
+      if (!mobile) continue;
+      if (!m.has(mobile)) m.set(mobile, { mobile, name: '', kids: [] });
+      const f = m.get(mobile); f.kids.push(s); if (!f.name && s.guardian_name) f.name = s.guardian_name;
+    }
+    return [...m.values()].map((f) => {
+      const linkedTo = new Set((links || []).filter((l) => f.kids.some((k) => k.id === l.student_id)).map((l) => l.parent_id));
+      const parent = parents.find((p) => localPhone(p.phone) === f.mobile) || parents.find((p) => linkedTo.has(p.id));
+      const missing = parent ? f.kids.filter((k) => !(links || []).some((l) => l.parent_id === parent.id && l.student_id === k.id)) : f.kids;
+      return { ...f, parent, missing };
+    }).filter((f) => !f.parent || f.missing.length).sort((a, b) => (a.name || '').localeCompare(b.name || ''));
+  }, [students, profiles, links]); // eslint-disable-line react-hooks/exhaustive-deps
+  const noPhone = students.filter((s) => !localPhone(s.guardian_phone || s.whatsapp));
+  const shown = fams.filter((f) => !q || `${f.name} ${f.mobile} ${f.kids.map((k) => k.full_name + ' ' + k.student_code).join(' ')}`.toLowerCase().includes(q.toLowerCase()));
+  const picked = shown.filter((f) => !off.has(f.mobile));
+
+  async function run() {
+    const out = [];
+    for (const [k, f] of picked.entries()) {
+      setBusy(`${k + 1} of ${picked.length}`);
+      let parentId = f.parent?.id, password = '', username = '', note = '', error = '';
+      if (!parentId) {
+        password = pwMode === 'phone' ? f.mobile : makePassword();
+        const r = await supabase.rpc('admin_create_user', {
+          p_email: '', p_password: password, p_full_name: f.name || `Parent of ${f.kids[0].full_name}`, p_phone: f.mobile, p_role: 'parent', p_student_id: f.kids[0].id,
+        });
+        if (r.error) { out.push({ f, error: r.error.message }); continue; }
+        parentId = r.data.id;
+        f.code = r.data.staff_code;
+      }
+      const rest = f.missing.filter((c) => f.parent || c.id !== f.kids[0].id);
+      if (rest.length) {
+        const { error: e } = await supabase.from('parent_links').upsert(rest.map((c) => ({ parent_id: parentId, student_id: c.id, verified: true })), { onConflict: 'parent_id,student_id', ignoreDuplicates: true });
+        if (e) error = `Children not all linked: ${e.message}`;
+      }
+      if (!f.parent || !f.parent.username) {
+        // the mobile number becomes the parent's sign-in; children keep their Student ID
+        if (freeNumber) {
+          const kidProfiles = linkedStudents.filter((x) => f.kids.some((c) => c.student_code === x.student_code)).map((x) => x.profile_id);
+          const taken = profiles.filter((p) => p.role === 'student' && kidProfiles.includes(p.id) && p.username && (p.username === f.mobile || p.username.startsWith(f.mobile + '-')));
+          for (const p of taken) await supabase.from('profiles').update({ username: null }).eq('id', p.id);
+        }
+        const { error: e3 } = await supabase.from('profiles').update({ username: f.mobile }).eq('id', parentId);
+        if (!e3) username = f.mobile; else note = 'mobile number already used by another login — sign in with the Parent ID';
+      }
+      out.push({ f, password, username, note, error });
+    }
+    setBusy(''); setDone(out);
+  }
+  const ok = (done || []).filter((r) => !r.error || r.password);
+  const stamp = new Date().toISOString().slice(0, 10);
+  const rows = () => ok.map(({ f, password, username }) => ({
+    'Sign in with': username || f.code || f.parent?.staff_code || '', 'Parent ID': f.code || f.parent?.staff_code || '', Parent: f.name || '',
+    Children: f.kids.map((c) => `${c.full_name} (${c.student_code})`).join(', '), Password: password || '(unchanged)', Mobile: f.mobile,
+  }));
+  const msg = (r) => loginMessage({ full_name: r.f.name, email: '', password: r.password, role: 'parent', staff_code: r.f.code, username: r.username, phone: r.f.mobile })
+    + `\n\nYour children: ${r.f.kids.map((c) => c.full_name).join(', ')}`;
+
+  if (!links) return <Modal title="Parent logins" onClose={onClose}><div className="spinner" /></Modal>;
+  return (
+    <Modal title={done ? `Parent logins (${ok.length})` : 'Parent logins by guardian phone'} onClose={busy ? () => {} : onClose}>
+      {!done ? (
+        <>
+          <p className="small muted">Students with the <b>same guardian phone</b> are put under <b>one parent login</b>. The parent signs in with the <b>mobile number</b> (or Parent ID PR…) and sees all their children. Families that already have a parent login only get their missing children linked.</p>
+          <div className="filters">
+            <select value={pwMode} onChange={(e) => setPwMode(e.target.value)} aria-label="Password">
+              <option value="random">Password: a new password for each parent</option>
+              <option value="phone">Password: the parent's mobile number</option>
+            </select>
+            <input type="search" placeholder="Search parent, child, phone…" value={q} onChange={(e) => setQ(e.target.value)} />
+          </div>
+          <label className="check-inline"><input type="checkbox" checked={freeNumber} onChange={(e) => setFreeNumber(e.target.checked)} /> Give the mobile number to the parent — the children then sign in with their Student ID (QC…)</label>
+          <div className="pick-list">
+            <div className="pick-head"><label><input type="checkbox" checked={picked.length === shown.length && shown.length > 0}
+              onChange={(e) => { const n = new Set(off); shown.forEach((f) => (e.target.checked ? n.delete(f.mobile) : n.add(f.mobile))); setOff(n); }} />
+              <b>{picked.length} of {shown.length} families selected</b></label></div>
+            <div className="pick-body">
+              {shown.map((f) => (
+                <label key={f.mobile} className="pick-row">
+                  <input type="checkbox" checked={!off.has(f.mobile)} onChange={(e) => { const n = new Set(off); if (e.target.checked) n.delete(f.mobile); else n.add(f.mobile); setOff(n); }} />
+                  <span className="pick-name"><b>{f.name || 'Parent'}</b> <span className="muted">{f.mobile}</span></span>
+                  <span className="pick-meta small muted">
+                    {f.kids.length} child{f.kids.length === 1 ? '' : 'ren'}: {f.kids.map((c) => `${c.full_name} (${c.student_code})`).join(', ')}
+                    {f.parent && <b> · has login {f.parent.staff_code} — will link {f.missing.length} more</b>}
+                  </span>
+                </label>
+              ))}
+              {!shown.length && <p className="muted small" style={{ padding: 12 }}>Every family already has a parent login with all children linked.</p>}
+            </div>
+          </div>
+          {noPhone.length > 0 && <p className="small muted">{noPhone.length} student{noPhone.length === 1 ? ' has' : 's have'} no guardian phone and {noPhone.length === 1 ? 'is' : 'are'} not listed: {noPhone.slice(0, 6).map((s) => s.full_name).join(', ')}{noPhone.length > 6 ? '…' : ''}</p>}
+          <div className="actions">
+            <button className="btn" onClick={run} disabled={!picked.length || !!busy}>{busy ? `Working ${busy}…` : `Create / link ${picked.length} famil${picked.length === 1 ? 'y' : 'ies'}`}</button>
+            <button className="btn ghost" onClick={onClose} disabled={!!busy}>Cancel</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="small muted">Send each parent their details now — new passwords are not shown again. After signing in they see all their children under <b>My children</b>.</p>
+          <div className="actions">
+            <button className="btn" disabled={!ok.length} onClick={() => downloadPdf(`parent-logins-${stamp}.pdf`, { title: 'Parent logins', subtitle: `Website: ${window.location.origin}   ·   Sign in with the mobile number (or Parent ID) and password`, tables: [{ heading: `${ok.length} parents`, columns: Object.keys(rows()[0] || {}), rows: rows().map((r) => Object.values(r)) }] })}>Download PDF</button>
+            <button className="btn ghost" disabled={!ok.length} onClick={() => downloadExcel(`parent-logins-${stamp}.xlsx`, [{ name: 'Parent logins', rows: rows() }])}>Excel</button>
+          </div>
+          <div className="pick-list"><div className="pick-body">
+            {done.map((r) => (
+              <div key={r.f.mobile} className="pick-row">
+                <span className="pick-name"><b>{r.f.name || 'Parent'}</b> <span className="muted">{r.f.code || r.f.parent?.staff_code}</span></span>
+                {r.error && !r.password && !r.f.parent ? <span className="pick-meta small low">Not created: {r.error}</span> : (
+                  <span className="pick-meta small">
+                    {r.f.parent ? <>Linked {r.f.missing.length} more child{r.f.missing.length === 1 ? '' : 'ren'} to the existing login</> : <>Sign in: <b>{r.username || r.f.code}</b> · Password: <code>{r.password}</code></>}
+                    {' '}· {r.f.kids.map((c) => c.full_name).join(', ')}
+                    {(r.note || r.error) && <span className="muted"> ({r.note || r.error})</span>}{' '}
+                    {r.password && whatsappLink(r.f.mobile, 'x') && <a className="btn whatsapp small" target="_blank" rel="noreferrer" href={whatsappLink(r.f.mobile, msg(r))}>WhatsApp</a>}
+                  </span>
+                )}
+              </div>
+            ))}
+          </div></div>
           <div className="actions"><button className="btn ghost" onClick={onClose}>Close</button></div>
         </>
       )}
