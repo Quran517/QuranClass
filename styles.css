@@ -829,3 +829,6 @@ tbody tr:hover td { background: #f8fafe; }
 .auth-logo, .cert-logo, .dash-hero-logo:not(.photo), .idcard-logo, .side-brand img, .appbar-logo, .logo-preview {
   border-radius: 50% !important; object-fit: cover; background: #fff; box-shadow: 0 0 0 2px var(--gold, #c9a86a); aspect-ratio: 1 / 1;
 }
+.idcard-photo.icon { border-style: solid; border-color: #e6dccb; background: #fff; overflow: hidden; justify-content: flex-end; padding: 0; }
+.idcard.girl .idcard-photo.icon { border-color: #f2c6d2; background: #fff; }
+.idcard-avatar { width: 92%; height: auto; display: block; }

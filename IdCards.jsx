@@ -18,7 +18,32 @@ function Barcode({ value }) {
   );
 }
 
-const initials = (name) => (name || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();
+// Picture shown until a photo is added: boy, girl (hijab) or staff.
+export function Avatar({ variant }) {
+  if (variant === 'girl') {
+    return (
+      <svg className="idcard-avatar" viewBox="0 0 100 120" aria-hidden="true">
+        <path d="M50 8c-20 0-33 15-33 35v18c0 9-4 15-8 20l-4 39h90l-4-39c-4-5-8-11-8-20V43C83 23 70 8 50 8z" fill="#f07b93" />
+        <path d="M50 26c-12 0-19 9-19 20v8c0 12 8 21 19 21s19-9 19-21v-8c0-11-7-20-19-20z" fill="#fff" />
+        <path d="M24 92c4 10 2 22 2 28h-8l2-24zM76 92c-4 10-2 22-2 28h8l-2-24z" fill="#fff" opacity=".9" />
+      </svg>
+    );
+  }
+  const shirt = variant === 'staff' ? '#2f5a8a' : '#3d9be0', collar = variant === 'staff' ? '#24406f' : '#2f86cc';
+  return (
+    <svg className="idcard-avatar" viewBox="0 0 100 120" aria-hidden="true">
+      <path d="M8 120c0-22 13-36 30-38h24c17 2 30 16 30 38z" fill={shirt} />
+      <path d="M38 82l12 14 12-14z" fill="#f2b632" />
+      <path d="M38 82l12 14-9 8-8-18zM62 82L50 96l9 8 8-18z" fill={collar} />
+      <path d="M50 96v24" stroke={collar} strokeWidth="2" />
+      <rect x="63" y="100" width="14" height="11" rx="2" fill={collar} />
+      <rect x="42" y="66" width="16" height="18" rx="4" fill="#f2b632" />
+      <ellipse cx="50" cy="48" rx="21" ry="25" fill="#fdc94a" />
+      <path d="M28 46c-2-20 9-31 24-31 12 0 23 6 22 20-5-6-12-7-17-5-8 3-18 2-23-2 0 6-2 13-6 18z" fill="#2f3542" />
+    </svg>
+  );
+}
+
 
 function useQrImages(items) {
   const [imgs, setImgs] = useState({});
@@ -61,7 +86,7 @@ export function IdCard({ person, qrSrc, settings, back }) {
         {settings.show_card_photos !== false && (
           person.photo
             ? <img className="idcard-photo has-photo" src={person.photo} alt={`Photo of ${person.name}`} />
-            : <div className="idcard-photo" aria-label="No photo"><span>{initials(person.name)}</span><small>photo</small></div>
+            : <div className="idcard-photo icon" aria-label="No photo yet"><Avatar variant={person.variant} /></div>
         )}
         <div className="idcard-info">
           <div className="idcard-name">{person.name}</div>
@@ -327,7 +352,7 @@ function PhotoModal({ person, onClose, onSaved }) {
     <Modal title={`Photo — ${person.name}`} onClose={onClose}>
       <p className="small muted">Optional. Use a clear, front-facing photo with a plain background. It is shrunk to a small size and shown only on ID cards. Ask parents' permission first.</p>
       <div className="photo-edit">
-        {img ? <img src={img} alt="" /> : <div className="idcard-photo big"><span>{initials(person.name)}</span><small>no photo</small></div>}
+        {img ? <img src={img} alt="" /> : <div className="idcard-photo big icon"><Avatar variant={person.variant} /></div>}
         <div className="actions">
           <label className="btn ghost file-btn">Choose photo<input type="file" accept="image/*" capture="user" hidden onChange={pick} /></label>
           {img && img !== person.photo && <button className="btn" disabled={busy} onClick={() => save(img)}>{busy ? 'Saving…' : 'Save photo'}</button>}
