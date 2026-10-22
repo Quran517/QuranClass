@@ -197,12 +197,7 @@ export default function Classes() {
             )}
             <label>Level<input name="level" defaultValue={editing.level || ''} placeholder="e.g. Beginners / Qaida" /></label>
             <label className="span2">Schedule<input name="schedule" defaultValue={editing.schedule || ''} placeholder="e.g. Every Saturday 4:00–6:00 pm" /></label>
-            <label className="span2">Teacher
-              <select name="teacher_id" defaultValue={editing.teacher_id || ''}>
-                <option value="">Not assigned</option>
-                {(teachers.data || []).map((t) => <option key={t.id} value={t.id}>{t.full_name || t.email}{t.staff_code ? ` · ${t.staff_code}` : ''}{t.role === 'admin' ? ' (admin)' : ''}</option>)}
-              </select>
-            </label>
+            <TeacherPicker teachers={teachers.data || []} initial={editing.teacher_id || ''} />
             {(teachers.data || []).length === 0 && <p className="span2 small muted">No teachers yet. Create teacher logins under Users → Create teacher login.</p>}
             {err && <p className="error span2">{err}</p>}
             {notice && <p className="success span2">{notice}</p>}
@@ -384,6 +379,37 @@ function Roster({ klass, classes, groups, students, limit, onChanged }) {
       ) : (
         <ImportStudents classes={classes} fixedClassId={klass.id} onDone={onChanged} />
       )}
+    </div>
+  );
+}
+
+// Teacher for a class: type a name, phone or Teacher ID to find them, then tap to choose.
+function TeacherPicker({ teachers, initial }) {
+  const [id, setId] = useState(initial);
+  const [q, setQ] = useState('');
+  const label = (t) => `${t.full_name || t.email}${t.staff_code ? ` · ${t.staff_code}` : ''}${t.role === 'admin' ? ' (admin)' : ''}`;
+  const cur = teachers.find((t) => t.id === id);
+  const found = q.trim()
+    ? teachers.filter((t) => `${t.full_name} ${t.email} ${t.phone || ''} ${t.staff_code || ''}`.toLowerCase().includes(q.trim().toLowerCase()))
+    : teachers;
+  return (
+    <div className="span2 teacher-picker">
+      <input type="hidden" name="teacher_id" value={id} />
+      <div className="row-between">
+        <span className="field-label">Teacher</span>
+        <span className="small">{cur ? <>Now: <b>{label(cur)}</b></> : <span className="muted">Not assigned</span>}</span>
+      </div>
+      <input type="search" placeholder="Search teacher by name, phone or ID (TC…)" value={q} onChange={(e) => setQ(e.target.value)} />
+      <div className="tp-list">
+        <button type="button" className={`tp-item ${!id ? 'on' : ''}`} onClick={() => setId('')}>Not assigned</button>
+        {found.map((t) => (
+          <button type="button" key={t.id} className={`tp-item ${t.id === id ? 'on' : ''}`} onClick={() => setId(t.id)}>
+            {t.id === id ? '✓ ' : ''}{label(t)}{t.phone ? <small> · {t.phone}</small> : null}
+          </button>
+        ))}
+        {!found.length && <p className="small muted" style={{ padding: 8 }}>No teacher matches “{q}”.</p>}
+      </div>
+      <p className="small muted">Choose the teacher, then press <b>Save details</b>.</p>
     </div>
   );
 }

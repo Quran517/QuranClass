@@ -883,3 +883,10 @@ tbody tr:hover td { background: #f8fafe; }
   #print-root .paper-a4.ten .a4-row { gap: 3mm; }
   #print-root .paper-a4.ten .a4-page { gap: 2.5mm; }
 }
+.teacher-picker .field-label { font-weight: 600; font-size: .9rem; }
+.teacher-picker input[type=search] { margin: 6px 0; }
+.tp-list { max-height: 210px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; }
+.tp-item { display: block; width: 100%; text-align: left; background: #fff; border: 0; border-bottom: 1px solid var(--line); padding: 10px 12px; font: inherit; cursor: pointer; }
+.tp-item:last-child { border-bottom: 0; }
+.tp-item.on { background: #f4efe4; font-weight: 700; color: var(--navy); }
+.tp-item small { color: var(--muted); font-weight: 400; }
