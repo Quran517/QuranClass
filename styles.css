@@ -890,3 +890,4 @@ tbody tr:hover td { background: #f8fafe; }
 .tp-item:last-child { border-bottom: 0; }
 .tp-item.on { background: #f4efe4; font-weight: 700; color: var(--navy); }
 .tp-item small { color: var(--muted); font-weight: 400; }
+.report-options { margin: 6px 0 14px; } .report-options summary { cursor: pointer; padding: 6px 0; }

@@ -102,6 +102,7 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
       if (t.sectionNote) { doc.setFontSize(9.5); doc.text(t.sectionNote, 40, y + 4); y += 14; }
     }
     if (t.signatures) { drawSignatures(t.signatures); continue; }
+    if (!t.columns) { y += 6; continue; } // a section heading on its own
     if (t.heading) {
       doc.setFontSize(12);
       doc.text(t.heading, 40, y + 6);

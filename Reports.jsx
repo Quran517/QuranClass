@@ -260,13 +260,27 @@ export default function Reports({ profile }) {
   const [withQr, setWithQr] = useState(true);       // student QR codes in the PDF
   const [ready, setReady] = useState([]);          // the separate teacher PDFs, ready to save
   const chosen = teacherGroups.filter((g) => !picked || picked.includes(g.id));
+  // Tick what goes in the class report (saved on this computer)
+  const COLS = ['Student ID', 'Adm No', 'Class', 'Group', 'Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
+  const PARTS = [['teacherLine', 'Teacher phone, classes & attendance line'], ['classesTable', 'Classes table']];
+  const [include, setInclude] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem('qc-class-report-cols') || 'null'); if (Array.isArray(v)) return new Set(v); } catch { /* ignore */ }
+    return new Set([...COLS, ...PARTS.map(([k]) => k)]);
+  });
+  const toggleInclude = (k, on) => {
+    const n = new Set(include); if (on) n.add(k); else n.delete(k); setInclude(n);
+    try { localStorage.setItem('qc-class-report-cols', JSON.stringify([...n])); } catch { /* ignore */ }
+  };
+  const pickCols = (rows) => rows.map((r) => Object.fromEntries(Object.entries(r).filter(([k]) => k === 'Name' || include.has(k))));
   const teacherSection = (g, newPage) => {
     const tr = teacherRows.find((r) => r.Teacher === g.name) || {};
+    const head = { newPage, section: `Teacher: ${g.name}${g.code ? '  (' + g.code + ')' : ''}`,
+      sectionNote: include.has('teacherLine') ? [g.phone && `Phone: ${g.phone}`, `Classes: ${tr.Classes || '—'}`, `Students: ${tr.Students ?? 0}`, `Attendance: ${tr['Attendance %'] ?? 0}%`].filter(Boolean).join('   ·   ') : '' };
     return [
-      { newPage, section: `Teacher: ${g.name}${g.code ? '  (' + g.code + ')' : ''}`,
-        sectionNote: [g.phone && `Phone: ${g.phone}`, `Classes: ${tr.Classes || '—'}`, `Students: ${tr.Students ?? 0}`, `Attendance: ${tr['Attendance %'] ?? 0}%`].filter(Boolean).join('   ·   '),
-        heading: 'Classes', ...tbl(classesOf(g.classIds).map(({ Teacher, 'Teacher ID': a, 'Teacher phone': b, ...r }) => r), 'Class') }, // eslint-disable-line no-unused-vars
-      { heading: 'Student details', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds), fitPage: true },
+      include.has('classesTable')
+        ? { ...head, heading: 'Classes', ...tbl(classesOf(g.classIds).map(({ Teacher, 'Teacher ID': a, 'Teacher phone': b, ...r }) => r), 'Class') } // eslint-disable-line no-unused-vars
+        : head,
+      { heading: 'Student details', ...tbl(pickCols(studentsOf(g.classIds)), 'Student'), barcode: qrOf(g.classIds), fitPage: true },
     ];
   };
   async function classReports() {
@@ -371,7 +385,20 @@ export default function Reports({ profile }) {
               );
             })}
           </div>
-          <label className="check-inline"><input type="checkbox" checked={withQr} onChange={(e) => setWithQr(e.target.checked)} /> Show each student's barcode after Attendance % (same as the ID card — scan it to mark attendance)</label>
+          <details className="report-options" open>
+            <summary><b>What to include</b> <span className="small muted">— tick what you need, untick what you don't (Name is always included)</span></summary>
+            <div className="type-chips">
+              {PARTS.map(([k, l]) => (
+                <label key={k} className={`type-chip ${include.has(k) ? 'on' : ''}`}><input type="checkbox" checked={include.has(k)} onChange={(e) => toggleInclude(k, e.target.checked)} />{l}</label>
+              ))}
+            </div>
+            <div className="type-chips">
+              {COLS.map((k) => (
+                <label key={k} className={`type-chip ${include.has(k) ? 'on' : ''}`}><input type="checkbox" checked={include.has(k)} onChange={(e) => toggleInclude(k, e.target.checked)} />{k}</label>
+              ))}
+              <label className={`type-chip ${withQr ? 'on' : ''}`}><input type="checkbox" checked={withQr} onChange={(e) => setWithQr(e.target.checked)} />Barcode</label>
+            </div>
+          </details>
           <div className="actions">
             {chosen.length > 1 && (
               <select value={oneFile ? 'one' : 'each'} onChange={(e) => setOneFile(e.target.value === 'one')} aria-label="PDF files" className="split-select">
