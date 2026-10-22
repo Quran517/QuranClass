@@ -3,6 +3,7 @@ import { supabase } from './supabase.js';
 import { useQuery, fetchClasses, fetchTeachers, fetchGroups } from './data.js';
 import { classCounts, groupFor, ageOf } from './util.js';
 import Modal from './Modal.jsx';
+import { printDoorSign } from './doorSign.js';
 import ImportStudents from './ImportStudents.jsx';
 
 export default function Classes() {
@@ -203,6 +204,7 @@ export default function Classes() {
             {notice && <p className="success span2">{notice}</p>}
             <div className="span2 actions">
               <button className="btn">{editing.id ? 'Save details' : 'Create class & add students'}</button>
+              {editing.id && <button type="button" className="btn ghost" onClick={() => printDoorSign(editing, (teachers.data || []).find((x) => x.id === editing.teacher_id)?.full_name || '')}>🖨 Print door sign (A4)</button>}
               {editing.id && <button type="button" className="btn danger ghost" onClick={remove}>Delete class</button>}
             </div>
           </form>
