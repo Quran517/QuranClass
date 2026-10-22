@@ -214,7 +214,7 @@ export default function Users({ me }) {
     }
     if (!error && f.has('gender') && (f.get('gender') || null) !== (resetting.gender || null)) {
       const { error: eg } = await supabase.from('profiles').update({ gender: f.get('gender') || null }).eq('id', resetting.id);
-      if (eg) note += /gender/.test(eg.message) ? ' (Gender not saved — run update-26.sql in Supabase.)' : ` (Gender not saved: ${eg.message})`;
+      if (eg) note += /column|schema cache/i.test(eg.message) ? ` (Gender not saved — run update-26.sql in Supabase, then refresh this page. Details: ${eg.message})` : ` (Gender not saved: ${eg.message})`;
     }
     setBusy(false);
     if (error) { setErr(usernameError(error)); return; }
