@@ -57,7 +57,7 @@ export default function Reports({ profile }) {
     setLoading(true); setErr('');
     try {
       const [students, att] = await Promise.all([
-        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id, qr_token, date_of_birth, school_grade, address, guardian_name, guardian_phone, whatsapp')
+        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id, qr_token, date_of_birth, school_grade, address, guardian_name, guardian_phone, whatsapp, gender, quran_level, email, notes, status')
           .in('class_id', classIds).eq('status', 'approved').order('full_name')),
         fetchAll(() => supabase.from('attendance')
           .select('id, student_id, class_id, att_date, status, method, students(full_name, student_code, admission_no)')
@@ -105,7 +105,10 @@ export default function Reports({ profile }) {
 
   const summaryRows = summary.map((s) => ({
     'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id),
-    Age: ageOf(s.date_of_birth) ?? '', Grade: s.school_grade || '', 'City / area': s.address || '', Mobile: s.guardian_phone || s.whatsapp || '',
+    Gender: s.gender === 'female' ? 'Female' : s.gender === 'male' ? 'Male' : '', 'Date of birth': s.date_of_birth ? formatDate(s.date_of_birth) : '', Age: ageOf(s.date_of_birth) ?? '',
+    Grade: s.school_grade || '', 'Quran level': s.quran_level || '', Guardian: s.guardian_name || '', 'Guardian phone': s.guardian_phone || '',
+    WhatsApp: s.whatsapp || '', Email: s.email || '', 'City / area': s.address || '', Notes: s.notes || '',
+    Status: s.status ? ({ approved: 'Enrolled', pending: 'Pending', inactive: 'Inactive', rejected: 'Rejected' }[s.status] || s.status) : '',
     Present: s.present, Late: s.late, Absent: s.absent, Excused: s.excused,
     'Sessions marked': s.total, 'Attendance %': pct(s.present + s.late, s.total),
   }));
@@ -262,8 +265,10 @@ export default function Reports({ profile }) {
   const [ready, setReady] = useState([]);          // the separate teacher PDFs, ready to save
   const chosen = teacherGroups.filter((g) => !picked || picked.includes(g.id));
   // Tick what goes in the class report (saved on this computer)
-  const COLS = ['Student ID', 'Adm No', 'Class', 'Group', 'Age', 'Grade', 'City / area', 'Mobile', 'Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
-  const NEW_OFF = ['Age', 'Grade', 'City / area', 'Mobile']; // extra columns start unticked
+  const EXTRA = ['Gender', 'Date of birth', 'Age', 'Grade', 'Quran level', 'Guardian', 'Guardian phone', 'WhatsApp', 'Email', 'City / area', 'Notes', 'Status'];
+  const COLS = ['Student ID', 'Adm No', 'Class', 'Group', ...EXTRA, 'Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
+  const NEW_OFF = EXTRA; // student details start unticked
+  const ATT = ['Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
   const PARTS = [['teacherLine', 'Teacher phone, classes & attendance line'], ['classesTable', 'Classes table']];
   const [include, setInclude] = useState(() => {
     try { const v = JSON.parse(localStorage.getItem('qc-class-report-cols') || 'null'); if (Array.isArray(v)) return new Set(v); } catch { /* ignore */ }
@@ -395,7 +400,19 @@ export default function Reports({ profile }) {
               ))}
             </div>
             <div className="type-chips">
-              {COLS.map((k) => (
+              {COLS.filter((k) => !EXTRA.includes(k) && !ATT.includes(k)).map((k) => (
+                <label key={k} className={`type-chip ${include.has(k) ? 'on' : ''}`}><input type="checkbox" checked={include.has(k)} onChange={(e) => toggleInclude(k, e.target.checked)} />{k}</label>
+              ))}
+            </div>
+            <p className="small muted" style={{ margin: '4px 0 0' }}>Student details (from the student form)</p>
+            <div className="type-chips">
+              {EXTRA.map((k) => (
+                <label key={k} className={`type-chip ${include.has(k) ? 'on' : ''}`}><input type="checkbox" checked={include.has(k)} onChange={(e) => toggleInclude(k, e.target.checked)} />{k}</label>
+              ))}
+            </div>
+            <p className="small muted" style={{ margin: '4px 0 0' }}>Attendance</p>
+            <div className="type-chips">
+              {ATT.map((k) => (
                 <label key={k} className={`type-chip ${include.has(k) ? 'on' : ''}`}><input type="checkbox" checked={include.has(k)} onChange={(e) => toggleInclude(k, e.target.checked)} />{k}</label>
               ))}
               <label className={`type-chip ${withQr ? 'on' : ''}`}><input type="checkbox" checked={withQr} onChange={(e) => setWithQr(e.target.checked)} />Barcode</label>
