@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
-import { useQuery, fetchClasses, fetchGroups } from './data.js';
+import { useQuery, fetchClasses, fetchGroups, fetchTeachers } from './data.js';
 import { formatDate, whatsappLink, groupFor, classCounts } from './util.js';
 import { downloadExcel } from './exports.js';
 import StudentForm from './StudentForm.jsx';
@@ -11,6 +11,8 @@ import ImportStudents from './ImportStudents.jsx';
 export default function Students() {
   const classes = useQuery(fetchClasses);
   const groups = useQuery(fetchGroups);
+  const teachers = useQuery(fetchTeachers);
+  const teacherOf = (classId) => { const t = (teachers.data || []).find((x) => x.id === classById[classId]?.teacher_id); return t ? t.full_name || t.email : ''; };
   const list = useQuery(() => supabase.from('students').select('*').neq('status', 'pending').order('full_name'));
   const [q, setQ] = useState('');
   const [cls, setCls] = useState('');
@@ -106,13 +108,14 @@ export default function Students() {
           <p className="muted small">{rows.length} student{rows.length === 1 ? '' : 's'}</p>
           <div className="table-wrap">
             <table>
-              <thead><tr><th>ID</th><th>Name</th><th>Class</th><th>Guardian</th><th></th></tr></thead>
+              <thead><tr><th>ID</th><th>Name</th><th>Class</th><th>Teacher</th><th>Guardian</th><th></th></tr></thead>
               <tbody>
                 {rows.map((s) => (
                   <tr key={s.id}>
                     <td className="nowrap">{s.student_code}{s.admission_no && <div className="small muted">Adm {s.admission_no}</div>}</td>
                     <td>{s.full_name}{s.status !== 'approved' && <> <span className={`badge ${s.status}`}>{s.status}</span></>}</td>
                     <td>{classById[s.class_id]?.name || <span className="muted">—</span>}{classById[s.class_id]?.group_name && <div className="small muted">{classById[s.class_id].group_name}</div>}</td>
+                    <td className="small">{teacherOf(s.class_id) || <span className="muted">—</span>}</td>
                     <td className="small">{s.guardian_name}<br />{s.guardian_phone}{s.email && <><br /><a href={`mailto:${s.email}`}>{s.email}</a></>}</td>
                     <td className="nowrap">
                       <button className="btn small ghost" onClick={() => setQr(s)}>QR</button>{' '}
@@ -133,6 +136,7 @@ export default function Students() {
             classes={classes.data || []}
             groups={groups.data || []}
             counts={classCounts(list.data)}
+            teacherOf={teacherOf}
             busy={busy}
             onSave={save}
             onDelete={editing.id ? () => remove(editing) : null}
@@ -164,7 +168,7 @@ export default function Students() {
   );
 }
 
-function AdminStudentForm({ student, classes, groups = [], counts = {}, busy, onSave, onDelete }) {
+function AdminStudentForm({ student, classes, groups = [], counts = {}, teacherOf = () => '', busy, onSave, onDelete }) {
   const [classId, setClassId] = useState(student.class_id || (groups.length ? 'auto' : ''));
   const g = groupFor(student, groups);
   const [status, setStatus] = useState(student.status || 'approved');
@@ -179,13 +183,13 @@ function AdminStudentForm({ student, classes, groups = [], counts = {}, busy, on
         onSubmit={(values) => onSave(values, { class_id: classId, status })}
         extra={
           <>
-            <label>Class
+            <label>Class (and its teacher)
               <select value={classId} onChange={(e) => setClassId(e.target.value)}>
                 {groups.length > 0 && <option value="auto">⚡ Automatic — by age &amp; gender{g ? ` (${g.name})` : ''}</option>}
                 <option value="">No class</option>
                 {classes.map((c) => {
                   const n = counts[c.id] || 0, cap = c.capacity || 12, full = groups.length > 0 && n >= cap && c.id !== student.class_id;
-                  return <option key={c.id} value={c.id} disabled={full}>{c.name}{groups.length ? ` (${n}/${cap}${full ? ' full' : ''})` : ''}</option>;
+                  return <option key={c.id} value={c.id} disabled={full}>{c.name}{teacherOf(c.id) ? ` — ${teacherOf(c.id)}` : ' — no teacher'}{groups.length ? ` (${n}/${cap}${full ? ' full' : ''})` : ''}</option>;
                 })}
               </select>
             </label>
