@@ -41,15 +41,52 @@ function useQrImages(items) {
 
 export function IdCard({ person, qrSrc, settings, back }) {
   if (back) {
+    const staffCard = person.kind !== 'student';
+    const office = [settings.contact_phone || settings.contact_whatsapp, settings.address].filter(Boolean);
     return (
       <div className={`idcard back ${person.variant || ''}`}>
-        <div className="idcard-band small-band"><img className="idcard-logo sm" src={logoOf(settings)} alt="" />{settings.school_name}</div>
-        <div className="idcard-back-body">
-          <p>{settings.card_note}</p>
-          {settings.address && <p>{settings.address}</p>}
-          {(settings.contact_phone || settings.contact_whatsapp) && <p>☎ {settings.contact_phone || settings.contact_whatsapp}</p>}
-          {settings.contact_email && <p>{settings.contact_email}</p>}
-          {person.kind === 'student' && person.guardian && <p className="emergency">Emergency: {person.guardian}</p>}
+        <div className="idcard-band back-band">
+          <img className="idcard-logo sm" src={logoOf(settings)} alt="" />
+          <div className="idcard-school">
+            <b>{settings.school_name}</b>
+            <span>{staffCard ? 'Staff' : person.variant === 'girl' ? 'Student · Girls' : 'Student · Boys'} · {settings.academic_year}</span>
+          </div>
+          <span className="back-ar" lang="ar" dir="rtl">{settings.school_name_ar || 'حلقة القرآن الكريم والتجويد'}</span>
+        </div>
+        <div className="back-main">
+          <div className="back-rules">
+            <h4>Card rules</h4>
+            <ol>
+              {(staffCard
+                ? ['Wear this card during every class.', 'Scan the barcode at the door to mark your attendance.', 'Do not lend this card to anyone.', 'If lost, tell the admin office.']
+                : [`Bring this card to every class${(settings.class_days || []).length === 1 ? ` (every ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][settings.class_days[0]]})` : ''}.`, 'Show the barcode at the door to mark attendance.', 'Do not lend this card to anyone.', 'If lost, tell your class teacher.']
+              ).map((r) => <li key={r}>{r}</li>)}
+            </ol>
+          </div>
+          <div className="back-side">
+            {staffCard ? (
+              <>
+                {office.length > 0 && <div className="back-box"><b>School office</b>{office.map((o, k) => <span key={k}>{k === 0 && (settings.contact_phone || settings.contact_whatsapp) ? '☎ ' : ''}{o}</span>)}</div>}
+                <div className="back-box"><b>If found</b><span>{settings.card_note || `Please return to ${settings.school_name}.`}</span></div>
+              </>
+            ) : (
+              <>
+                <div className="back-box"><b>Emergency contact</b>
+                  <span>{person.guardianName || '—'}</span>
+                  {person.guardianPhone && <span>☎ {person.guardianPhone}</span>}
+                </div>
+                <div className="back-box">
+                  <span><b>Class</b> {person.className || '—'}</span>
+                  {person.teacher && <span><b>Teacher</b> {person.teacher}</span>}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+        <div className="back-foot">
+          <div className="back-verse"><span lang="ar" dir="rtl">خيركم من تعلّم القرآن وعلّمه</span><small>“The best of you are those who learn the Qur’an and teach it.”</small></div>
+          <span className="back-valid">Valid {settings.academic_year}</span>
+          <span className="back-sig">Principal</span>
         </div>
       </div>
     );
@@ -88,7 +125,7 @@ export function IdCard({ person, qrSrc, settings, back }) {
 }
 
 export const PAPER = {
-  a4: { label: 'A4 sheet (cut out the cards)', css: '@page { size: A4 portrait; margin: 6mm 10mm; }' },
+  a4: { label: 'A4 sheet (cut out the cards)', css: '@page { size: A4 portrait; margin: 8mm 0; }' },
   card: { label: 'ID card printer (CR80, 1 card per page)', css: '@page { size: 85.6mm 54mm; margin: 0; }' },
 };
 
@@ -143,30 +180,33 @@ export function PrintCards({ people, withBack, paper = 'a4' }) {
       </div>
     );
   }
-  const pages = chunk(people, withBack ? 5 : 10);
+  const per = withBack ? 8 : 10;
+  const pages = chunk(people, per);
+  const slot = (p, k, back) => (p
+    ? <IdCard key={p.id + (back ? '-b' : '')} person={p} qrSrc={back ? undefined : imgs[p.id]} settings={settings} back={back} />
+    : <div key={'e' + k} className="idcard-slot" />);
   return (
     <div className="print-area paper-a4">
-      {pages.map((pg, i) => (
-        <div key={i} className="a4-page">
-          {withBack
-            ? pg.map((p) => (
-                <div key={p.id} className="a4-row">
-                  <IdCard person={p} qrSrc={imgs[p.id]} settings={settings} />
-                  <IdCard person={p} settings={settings} back />
-                </div>
-              ))
-            : chunk(pg, 2).map((row, j) => (
-                <div key={j} className="a4-row">
-                  {row.map((p) => <IdCard key={p.id} person={p} qrSrc={imgs[p.id]} settings={settings} />)}
-                </div>
-              ))}
-        </div>
-      ))}
+      {pages.map((pg, i) => {
+        const rows = chunk(pg, 2).map((r) => (r.length === 2 ? r : [r[0], null]));
+        return [
+          <div key={'f' + i} className="a4-page" data-label={withBack ? `Sheet ${i + 1} — front` : ''}>
+            {rows.map((r, j) => <div key={j} className="a4-row">{r.map((p, k) => slot(p, k, false))}</div>)}
+          </div>,
+          withBack && (
+            // back of the same sheet: each row is mirrored, so after turning the paper
+            // (flip on long edge) every back lands exactly behind its own front
+            <div key={'b' + i} className="a4-page back-page" data-label={`Sheet ${i + 1} — back`}>
+              {rows.map((r, j) => <div key={j} className="a4-row">{[...r].reverse().map((p, k) => slot(p, k, true))}</div>)}
+            </div>
+          ),
+        ];
+      })}
     </div>
   );
 }
 
-export function studentToCard(s, klass, photo) {
+export function studentToCard(s, klass, photo, teacher) {
   const c = typeof klass === 'string' ? { name: klass } : klass || {};
   return {
     id: s.id, kind: 'student', variant: s.gender === 'female' ? 'girl' : 'boy', photo: photo || null, gender: s.gender, name: s.full_name, code: s.student_code,
@@ -178,6 +218,8 @@ export function studentToCard(s, klass, photo) {
     summary: [s.admission_no && `Adm ${s.admission_no}`, classTag(c)].filter(Boolean).join(' · '),
     barcode: s.student_code,
     guardian: [s.guardian_name, s.guardian_phone].filter(Boolean).join(' · '),
+    guardianName: s.guardian_name || '', guardianPhone: s.guardian_phone || s.whatsapp || '',
+    className: c.name ? classTag(c) : '', teacher: teacher || '',
     qr: QR_PREFIX + s.qr_token,
   };
 }
@@ -216,7 +258,7 @@ export default function IdCards({ profile }) {
       return (students.data || [])
         .filter((s) => classId === 'all' || (classId === 'none' ? !s.class_id : s.class_id === classId))
         .filter((s) => design === 'all' || (design === 'girl' ? s.gender === 'female' : s.gender !== 'female'))
-        .map((s) => studentToCard(s, classOf(s.class_id), photoOf[s.id]));
+        .map((s) => studentToCard(s, classOf(s.class_id), photoOf[s.id], (staff.data || []).find((t) => t.id === classOf(s.class_id)?.teacher_id)?.full_name));
     }
     return (staff.data || []).map((p) => ({
       id: p.id, kind: 'teacher', variant: 'staff', photo: photoOf[p.id] || null, name: p.full_name || p.email, code: p.staff_code || '—',
@@ -237,7 +279,7 @@ export default function IdCards({ profile }) {
       <section className="card no-print">
         <h2>ID cards</h2>
         <p className="muted small">
-          Standard card size (85.6 × 54 mm). <b>A4</b>: 10 cards per page (5 with back side). <b>Card printer</b>: 1 card per page. Click <b>Print</b>, then choose your printer or <b>Save as PDF</b>.
+          Standard card size (85.6 × 54 mm). <b>A4</b>: 10 cards per page, or 8 with the back side — the back of the same 8 cards prints on the next page (choose <b>Print on both sides · Flip on long edge</b>). <b>Card printer</b>: 1 card per page. Click <b>Print</b>, then choose your printer or <b>Save as PDF</b>.
           For best results set margins to <i>None/Minimum</i> and turn on <i>Background graphics</i>.
         </p>
         <div className="filters">

@@ -832,3 +832,32 @@ tbody tr:hover td { background: #f8fafe; }
 .idcard-photo.icon { border-style: solid; border-color: #e6dccb; background: #fff; overflow: hidden; justify-content: flex-end; padding: 0; }
 .idcard.girl .idcard-photo.icon { border-color: #f2c6d2; background: #fff; }
 .idcard-avatar { width: 88%; height: auto; display: block; margin: 0 auto; }
+/* ---- ID card back side ---- */
+.idcard.back { --c: #1c2f55; --a: #e07414; --t: #fbf8f2; background: linear-gradient(135deg, #fff 60%, var(--t)); }
+.idcard.back.girl { --c: #6b1d4a; --a: #d4a537; --t: #fbf1f6; }
+.idcard.back.staff { --c: #0f5c4d; --a: #c9a227; --t: #eef7f4; }
+.idcard .back-band { background: var(--c); border-bottom: .8mm solid var(--a); padding: 1.6mm 3mm; gap: 2mm; }
+.idcard .back-band .idcard-logo.sm { width: 7.5mm; height: 7.5mm; }
+.idcard .back-band .idcard-school { min-width: 0; }
+.idcard .back-band .idcard-school b { font-size: 2.35mm; line-height: 1.15; white-space: nowrap; display: block; }
+.idcard .back-band .idcard-school span { display: block; font-size: 1.75mm; opacity: .85; }
+.idcard .back-ar { margin-left: auto; font: 700 2.6mm 'Amiri', 'Traditional Arabic', serif; white-space: nowrap; }
+.back-main { flex: 1; display: grid; grid-template-columns: 1.15fr 1fr; gap: 2.4mm; padding: 1.8mm 3mm 0; min-height: 0; }
+.back-rules h4 { margin: 0 0 .7mm; font-size: 2.1mm; color: var(--c); text-transform: uppercase; letter-spacing: .15mm; }
+.back-rules ol { margin: 0; padding-left: 3mm; font-size: 1.9mm; line-height: 1.32; color: #2a3242; }
+.back-box { border: .25mm solid #e3dccd; border-radius: 1.5mm; padding: 1.1mm 1.7mm; background: #fff; font-size: 1.9mm; color: #2a3242; line-height: 1.32; margin-bottom: 1.2mm; display: flex; flex-direction: column; }
+.back-box b { color: var(--c); }
+.back-foot { display: flex; align-items: flex-end; justify-content: space-between; gap: 2mm; padding: 0 3mm 1.5mm; }
+.back-verse span { display: block; font: 700 2.8mm 'Amiri', 'Traditional Arabic', serif; color: var(--c); }
+.back-verse small { display: block; font-size: 1.45mm; color: #777; max-width: 36mm; line-height: 1.2; }
+.back-valid { font-size: 1.65mm; color: #fff; background: var(--c); border-radius: 1mm; padding: .5mm 1.5mm; white-space: nowrap; }
+.back-sig { font-size: 1.6mm; color: #666; text-align: center; width: 19mm; border-top: .25mm solid #999; padding-top: .4mm; }
+/* ---- A4: 8 cards, backs on the next page (mirrored for two-sided printing) ---- */
+.paper-a4 .a4-row { justify-content: center; gap: 4mm; }
+.paper-a4 .a4-page { align-items: center; gap: 4mm; }
+.idcard-slot { width: 85.6mm; height: 54mm; flex: none; }
+.paper-a4 .a4-page[data-label]:not([data-label=""])::before { content: attr(data-label); font-size: .8rem; font-weight: 700; color: var(--muted); align-self: flex-start; }
+@media print {
+  .paper-a4 .a4-page::before { display: none !important; }
+  #print-root .paper-a4 .a4-page { gap: 4mm; }
+}

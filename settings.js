@@ -5,14 +5,14 @@ import defaultLogo from './logo.png';
 export { defaultLogo };
 
 export const DEFAULT_SETTINGS = {
-  school_name: 'SLIS-Jeddah Quran Class',
+  school_name: 'SLIS-Jeddah Quran Thajweed Class',
   tagline: 'Quran Learning • Character • Knowledge',
   academic_year: '2026–2027',
   contact_phone: '',
   contact_whatsapp: '',
   contact_email: '',
   address: '',
-  card_note: 'If found, please return to SLIS-Jeddah Quran Class.',
+  card_note: 'If found, please return to SLIS-Jeddah Quran Thajweed Class.',
   low_attendance_pct: 75,
   class_days: [6], // weekdays the class meets (0 = Sunday … 6 = Saturday)
   backup_every_days: 7,
