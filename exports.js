@@ -116,11 +116,11 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
     const QS = 40;
     // optional barcode (same as the ID card) in the last column (t.barcode = one text per row)
     const bc = t.barcode && t.rows.length ? t.barcode : null;
-    const BM = 0.7, BH = 15; // bar width and height (pt) — large enough for a laser scanner
+    const BM = 0.7; let BH = 15; // bar width and height (pt) — large enough for a laser scanner
     const bcCol = t.columns.length;
     // Every row on one line: each column is as wide as its longest text; if the table is
     // wider than the page, the letters get a little smaller (never below 6.5).
-    const base = t.compact ? 8 : 9, pad = t.compact ? 2.6 : 4;
+    const base = t.compact ? 8 : 9; let pad = t.compact ? 2.6 : 4;
     const extra = (qrImgs ? QS + 8 : 0) + (bc ? 100 : 0);
     const measure = (f) => {
       doc.setFontSize(f);
@@ -134,6 +134,18 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
     let fs = base;
     if (t.rows.length) { const need = measure(base); const room = W0 - 80; if (need > room) fs = Math.max(6.5, Math.floor(base * room / need * 10) / 10); }
     doc.setFont('helvetica', 'normal');
+    // fitPage: make the rows a little shorter so the whole table fits on this page
+    let rowMin = bc ? BH + 13 : 0;
+    if (t.fitPage && t.rows.length) {
+      const headH = fs * 1.15 + pad * 2;
+      const per = (H0 - 36 - y - headH) / t.rows.length;
+      const natural = Math.max(rowMin, fs * 1.15 + pad * 2);
+      if (per < natural && per >= 10) {
+        if (per < fs * 1.15 + 2) fs = Math.max(6.5, (per - 2) / 1.15);
+        pad = Math.max(1, Math.min(pad, (per - fs * 1.15) / 2));
+        if (bc) { BH = Math.max(8, Math.min(15, per - 10)); rowMin = per - 0.3; }
+      }
+    }
     const fixed = {};
     if (t.rows.length) t.columns.forEach((h, i) => { fixed[i + (qrImgs ? 1 : 0)] = { cellWidth: 'wrap' }; });
     autoTable(doc, {
@@ -142,18 +154,18 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
       columnStyles: fixed,
       body: t.rows.length ? (qrImgs ? t.rows.map((r) => ['', ...r]) : bc ? t.rows.map((r) => [...r, '']) : t.rows) : [[{ content: 'No records', colSpan: t.columns.length }]],
       ...(bc ? {
-        columnStyles: { ...fixed, [bcCol]: { cellWidth: 100, minCellHeight: BH + 13 } },
+        columnStyles: { ...fixed, [bcCol]: { cellWidth: 100, minCellHeight: rowMin } },
         bodyStyles: { valign: 'middle' },
         didDrawCell: (c) => {
           const v = c.section === 'body' && c.column.index === bcCol && bc[c.row.index];
           if (!v) return;
           const widths = code128Widths(v);
           const total = widths.reduce((a, w) => a + w, 0) * BM;
-          let x = c.cell.x + (c.cell.width - total) / 2; const top = c.cell.y + (c.cell.height - BH - 8) / 2;
-          doc.setFillColor(255, 255, 255); doc.rect(x - 8, top - 3, total + 16, BH + 12, 'F'); // white quiet zone
+          let x = c.cell.x + (c.cell.width - total) / 2; const top = c.cell.y + (c.cell.height - BH - 7) / 2;
+          doc.setFillColor(255, 255, 255); doc.rect(x - 8, top - 2, total + 16, BH + 9, 'F'); // white quiet zone
           doc.setFillColor(0, 0, 0);
           widths.forEach((w, i) => { if (i % 2 === 0) doc.rect(x, top, w * BM, BH, 'F'); x += w * BM; });
-          doc.setFontSize(6.5); doc.setTextColor(40); doc.text(v, c.cell.x + c.cell.width / 2, top + BH + 7, { align: 'center' });
+          doc.setFontSize(6.5); doc.setTextColor(40); doc.text(v, c.cell.x + c.cell.width / 2, top + BH + 6, { align: 'center' });
         },
       } : {}),
       ...(qrImgs ? {

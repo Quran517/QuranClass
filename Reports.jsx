@@ -228,7 +228,7 @@ export default function Reports({ profile }) {
         tables: teacherGroups.flatMap((g, k) => [
           { newPage: k > 0, section: `Teacher: ${g.name}${g.code ? ' (' + g.code + ')' : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf(g.classIds), 'Class') },
-          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds) },
+          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds), fitPage: true },
         ]),
       });
       return;
@@ -239,7 +239,7 @@ export default function Reports({ profile }) {
         tables: classIds.flatMap((id, k) => [
           { newPage: k > 0, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf([id]), 'Class') },
-          { heading: 'Student summary', ...tbl(studentsOf([id]), 'Student'), barcode: qrOf([id]) },
+          { heading: 'Student summary', ...tbl(studentsOf([id]), 'Student'), barcode: qrOf([id]), fitPage: true },
         ]),
       });
       return;
@@ -266,7 +266,7 @@ export default function Reports({ profile }) {
       { newPage, section: `Teacher: ${g.name}${g.code ? '  (' + g.code + ')' : ''}`,
         sectionNote: [g.phone && `Phone: ${g.phone}`, `Classes: ${tr.Classes || '—'}`, `Students: ${tr.Students ?? 0}`, `Attendance: ${tr['Attendance %'] ?? 0}%`].filter(Boolean).join('   ·   '),
         heading: 'Classes', ...tbl(classesOf(g.classIds).map(({ Teacher, 'Teacher ID': a, 'Teacher phone': b, ...r }) => r), 'Class') }, // eslint-disable-line no-unused-vars
-      { heading: 'Student details', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds) },
+      { heading: 'Student details', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds), fitPage: true },
     ];
   };
   async function classReports() {
