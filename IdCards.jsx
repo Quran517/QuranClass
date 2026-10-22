@@ -161,6 +161,22 @@ export function printCards(paper = 'a4') {
   setTimeout(() => window.print(), 80);
 }
 
+// Corner cut marks, drawn just outside the card so they are never on the card itself.
+function CutMarks({ tight }) {
+  const L = tight ? 1 : 3, G = tight ? 0.25 : 0.8; // mark length and gap from the card (mm)
+  const W = 85.6, H = 54, o = L + G;
+  const lines = [];
+  for (const [x, y] of [[0, 0], [W, 0], [0, H], [W, H]]) {
+    const dx = x === 0 ? -1 : 1, dy = y === 0 ? -1 : 1;
+    lines.push([x + dx * G, y, x + dx * o, y], [x, y + dy * G, x, y + dy * o]);
+  }
+  return (
+    <svg className="cut-marks" style={{ left: `-${o}mm`, top: `-${o}mm`, width: `${W + 2 * o}mm`, height: `${H + 2 * o}mm` }} viewBox={`${-o} ${-o} ${W + 2 * o} ${H + 2 * o}`} aria-hidden="true">
+      {lines.map(([x1, y1, x2, y2], i) => <line key={i} x1={x1} y1={y1} x2={x2} y2={y2} stroke="#000" strokeWidth="0.15" />)}
+    </svg>
+  );
+}
+
 const chunk = (arr, n) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, i * n + n));
 
 // A4: 10 card faces per page (2 across × 5 down). With back side, each row is front + back of one person.
@@ -182,11 +198,12 @@ export function PrintCards({ people, withBack, paper = 'a4' }) {
   }
   const per = withBack ? 8 : 10;
   const pages = chunk(people, per);
+  // each card sits in a frame with corner cut marks (outside the card) and a thin grey cut line
   const slot = (p, k, back) => (p
-    ? <IdCard key={p.id + (back ? '-b' : '')} person={p} qrSrc={back ? undefined : imgs[p.id]} settings={settings} back={back} />
+    ? <div key={p.id + (back ? '-b' : '')} className="cut-frame"><IdCard person={p} qrSrc={back ? undefined : imgs[p.id]} settings={settings} back={back} /><CutMarks tight={!withBack} /></div>
     : <div key={'e' + k} className="idcard-slot" />);
   return (
-    <div className="print-area paper-a4">
+    <div className={`print-area paper-a4 ${withBack ? 'eight' : 'ten'}`}>
       {pages.map((pg, i) => {
         const rows = chunk(pg, 2).map((r) => (r.length === 2 ? r : [r[0], null]));
         return [

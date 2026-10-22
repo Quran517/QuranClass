@@ -861,3 +861,25 @@ tbody tr:hover td { background: #f8fafe; }
   .paper-a4 .a4-page::before { display: none !important; }
   #print-root .paper-a4 .a4-page { gap: 4mm; }
 }
+/* ---- safe area: nothing closer than 4 mm to the card edge, so cutting never cuts letters ---- */
+.idcard-band { padding-left: 4mm; padding-right: 4mm; }
+.idcard-body { padding-left: 4mm; padding-right: 4mm; }
+.idcard-foot { padding-bottom: 2.2mm; }
+.idcard .back-band { padding-left: 4mm; padding-right: 4mm; }
+.back-main { padding-left: 4mm; padding-right: 4mm; }
+.back-foot { padding: 0 4mm 2.2mm; }
+/* ---- A4 cut guides ---- */
+.cut-frame { position: relative; width: 85.6mm; height: 54mm; flex: none; }
+.cut-marks { position: absolute; pointer-events: none; overflow: visible; }
+.paper-a4.eight .a4-row { gap: 6mm; }
+.paper-a4.eight .a4-page { gap: 5mm; }
+.paper-a4.ten .a4-row { gap: 3mm; }
+.paper-a4.ten .a4-page { gap: 2.5mm; }
+@media print {
+  /* square card with a thin light-grey cut line; round the corners with a corner cutter if you like */
+  #print-root .paper-a4 .idcard { border: 0.15mm solid #bdbdbd; border-radius: 0; }
+  #print-root .paper-a4.eight .a4-row { gap: 6mm; }
+  #print-root .paper-a4.eight .a4-page { gap: 5mm; }
+  #print-root .paper-a4.ten .a4-row { gap: 3mm; }
+  #print-root .paper-a4.ten .a4-page { gap: 2.5mm; }
+}
