@@ -133,12 +133,12 @@ export async function downloadPdf(filename, { title, subtitle, tables, orientati
       }, extra);
     };
     let fs = base;
-    if (t.rows.length) { const need = measure(base); const room = W0 - 80; if (need > room) fs = Math.max(6.5, Math.floor(base * room / need * 10) / 10); }
+    if (t.rows.length) { const need = measure(base); const room = W0 - 80; if (need > room) fs = Math.max(6, Math.floor(base * room / need * 10) / 10); }
     doc.setFont('helvetica', 'normal');
     // fitPage: make the rows a little shorter so the whole table fits on this page
     let rowMin = bc ? BH + 13 : 0;
     if (t.fitPage && t.rows.length) {
-      const headH = fs * 1.15 + pad * 2;
+      const headH = fs * 1.15 * 2 + pad * 2; // room for a heading on two lines
       const per = (H0 - 36 - y - headH) / t.rows.length;
       const natural = Math.max(rowMin, fs * 1.15 + pad * 2);
       if (per < natural && per >= 10) {

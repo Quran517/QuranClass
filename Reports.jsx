@@ -3,7 +3,7 @@ import { supabase } from './supabase.js';
 import { useQuery, fetchMyClasses } from './data.js';
 import { roleLabel, can } from './perms.js';
 import UsersReport from './UsersReport.jsx';
-import { today, formatDate, STATUS_LABELS, classDates } from './util.js';
+import { today, formatDate, STATUS_LABELS, classDates, ageOf } from './util.js';
 import { getSettings } from './settings.js';
 import { downloadExcel, downloadPdf, saveBlob, makeZip } from './exports.js';
 
@@ -57,7 +57,7 @@ export default function Reports({ profile }) {
     setLoading(true); setErr('');
     try {
       const [students, att] = await Promise.all([
-        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id, qr_token')
+        fetchAll(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id, qr_token, date_of_birth, school_grade, address, guardian_name, guardian_phone, whatsapp')
           .in('class_id', classIds).eq('status', 'approved').order('full_name')),
         fetchAll(() => supabase.from('attendance')
           .select('id, student_id, class_id, att_date, status, method, students(full_name, student_code, admission_no)')
@@ -105,6 +105,7 @@ export default function Reports({ profile }) {
 
   const summaryRows = summary.map((s) => ({
     'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id),
+    Age: ageOf(s.date_of_birth) ?? '', Grade: s.school_grade || '', 'City / area': s.address || '', Mobile: s.guardian_phone || s.whatsapp || '',
     Present: s.present, Late: s.late, Absent: s.absent, Excused: s.excused,
     'Sessions marked': s.total, 'Attendance %': pct(s.present + s.late, s.total),
   }));
@@ -228,7 +229,7 @@ export default function Reports({ profile }) {
         tables: teacherGroups.flatMap((g, k) => [
           { newPage: k > 0, section: `Teacher: ${g.name}${g.code ? ' (' + g.code + ')' : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf(g.classIds), 'Class') },
-          { heading: 'Student summary', ...tbl(studentsOf(g.classIds), 'Student'), barcode: qrOf(g.classIds), fitPage: true },
+          { heading: 'Student summary', ...tbl(pickCols(studentsOf(g.classIds)), 'Student'), barcode: qrOf(g.classIds), fitPage: true },
         ]),
       });
       return;
@@ -239,7 +240,7 @@ export default function Reports({ profile }) {
         tables: classIds.flatMap((id, k) => [
           { newPage: k > 0, section: `${className(id)}${groupOf(id) ? ' · ' + groupOf(id) : ''}`,
             heading: 'Classes, groups & teachers', ...tbl(classesOf([id]), 'Class') },
-          { heading: 'Student summary', ...tbl(studentsOf([id]), 'Student'), barcode: qrOf([id]), fitPage: true },
+          { heading: 'Student summary', ...tbl(pickCols(studentsOf([id])), 'Student'), barcode: qrOf([id]), fitPage: true },
         ]),
       });
       return;
@@ -248,7 +249,7 @@ export default function Reports({ profile }) {
       title: `Class report — ${label}`, subtitle: subtitleFor(),
       tables: [
         { heading: 'Classes, groups & teachers', ...tbl(classRows, 'Class') },
-        { heading: 'Student summary', ...tbl(summaryRows, 'Student'), barcode: qrOf(null) },
+        { heading: 'Student summary', ...tbl(pickCols(summaryRows), 'Student'), barcode: qrOf(null) },
       ],
     });
   }
@@ -261,11 +262,12 @@ export default function Reports({ profile }) {
   const [ready, setReady] = useState([]);          // the separate teacher PDFs, ready to save
   const chosen = teacherGroups.filter((g) => !picked || picked.includes(g.id));
   // Tick what goes in the class report (saved on this computer)
-  const COLS = ['Student ID', 'Adm No', 'Class', 'Group', 'Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
+  const COLS = ['Student ID', 'Adm No', 'Class', 'Group', 'Age', 'Grade', 'City / area', 'Mobile', 'Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
+  const NEW_OFF = ['Age', 'Grade', 'City / area', 'Mobile']; // extra columns start unticked
   const PARTS = [['teacherLine', 'Teacher phone, classes & attendance line'], ['classesTable', 'Classes table']];
   const [include, setInclude] = useState(() => {
     try { const v = JSON.parse(localStorage.getItem('qc-class-report-cols') || 'null'); if (Array.isArray(v)) return new Set(v); } catch { /* ignore */ }
-    return new Set([...COLS, ...PARTS.map(([k]) => k)]);
+    return new Set([...COLS.filter((k) => !NEW_OFF.includes(k)), ...PARTS.map(([k]) => k)]);
   });
   const toggleInclude = (k, on) => {
     const n = new Set(include); if (on) n.add(k); else n.delete(k); setInclude(n);
