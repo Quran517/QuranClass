@@ -21,8 +21,8 @@ function Barcode({ value }) {
 }
 
 // Picture shown until a photo is added: boy, girl (hijab) or staff.
-export function Avatar({ variant }) {
-  return <img className="idcard-avatar" src={variant === 'girl' ? avatarGirl : avatarBoy} alt="" />;
+export function Avatar({ variant, gender }) {
+  return <img className="idcard-avatar" src={variant === 'girl' || gender === 'female' ? avatarGirl : avatarBoy} alt="" />;
 }
 
 
@@ -104,7 +104,7 @@ export function IdCard({ person, qrSrc, settings, back }) {
         {settings.show_card_photos !== false && (
           person.photo
             ? <img className="idcard-photo has-photo" src={person.photo} alt={`Photo of ${person.name}`} />
-            : <div className="idcard-photo icon" aria-label="No photo yet"><Avatar variant={person.variant} /></div>
+            : <div className="idcard-photo icon" aria-label="No photo yet"><Avatar variant={person.variant} gender={person.gender} /></div>
         )}
         <div className="idcard-info">
           <div className="idcard-name">{person.name}</div>
@@ -248,7 +248,7 @@ export default function IdCards({ profile }) {
     supabase.from('students').select('*')
       .eq('status', 'approved').order('full_name'), [profile.id]);
   const staff = useQuery(() =>
-    supabase.from('profiles').select('id, full_name, email, phone, role, staff_code, staff_title').in('role', ['teacher', 'admin']).order('full_name'), [profile.id]);
+    supabase.from('profiles').select('*').in('role', ['teacher', 'admin']).order('full_name'), [profile.id]);
   const photos = useQuery(() => supabase.from('card_photos').select('student_id, profile_id, data')
     .then((r) => (r.error && /card_photos/.test(r.error.message) ? { data: [], error: null } : r)), [profile.id]);
   const [design, setDesign] = useState('all');
@@ -278,7 +278,7 @@ export default function IdCards({ profile }) {
         .map((s) => studentToCard(s, classOf(s.class_id), photoOf[s.id], (staff.data || []).find((t) => t.id === classOf(s.class_id)?.teacher_id)?.full_name));
     }
     return (staff.data || []).map((p) => ({
-      id: p.id, kind: 'teacher', variant: 'staff', photo: photoOf[p.id] || null, name: p.full_name || p.email, code: p.staff_code || '—',
+      id: p.id, kind: 'teacher', variant: 'staff', gender: p.gender || null, photo: photoOf[p.id] || null, name: p.full_name || p.email, code: p.staff_code || '—',
       lines: [p.role === 'admin' ? 'Administrator' : roleLabel(p), teachesWhat(p.id)],
       summary: p.role === 'admin' ? 'Administrator' : roleLabel(p),
       barcode: p.staff_code || '',
@@ -392,7 +392,7 @@ function PhotoModal({ person, onClose, onSaved }) {
     <Modal title={`Photo — ${person.name}`} onClose={onClose}>
       <p className="small muted">Optional. Use a clear, front-facing photo with a plain background. It is shrunk to a small size and shown only on ID cards. Ask parents' permission first.</p>
       <div className="photo-edit">
-        {img ? <img src={img} alt="" /> : <div className="idcard-photo big icon"><Avatar variant={person.variant} /></div>}
+        {img ? <img src={img} alt="" /> : <div className="idcard-photo big icon"><Avatar variant={person.variant} gender={person.gender} /></div>}
         <div className="actions">
           <label className="btn ghost file-btn">Choose photo<input type="file" accept="image/*" capture="user" hidden onChange={pick} /></label>
           {img && img !== person.photo && <button className="btn" disabled={busy} onClick={() => save(img)}>{busy ? 'Saving…' : 'Save photo'}</button>}

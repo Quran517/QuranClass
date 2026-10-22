@@ -12,8 +12,8 @@ const TYPES = [
 ];
 
 export default function UsersReport() {
-  const profiles = useQuery(() => supabase.from('profiles').select('id, full_name, email, phone, username, role, staff_code, staff_title, created_at').order('full_name'));
-  const students = useQuery(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id, profile_id, guardian_name, guardian_phone, whatsapp, email, status').neq('status', 'rejected').order('full_name'));
+  const profiles = useQuery(() => supabase.from('profiles').select('*').order('full_name'));
+  const students = useQuery(() => supabase.from('students').select('id, full_name, student_code, admission_no, class_id, profile_id, guardian_name, guardian_phone, whatsapp, email, status, gender').neq('status', 'rejected').order('full_name'));
   const classes = useQuery(() => supabase.from('classes').select('id, name, group_name, teacher_id').order('name'));
   const links = useQuery(() => supabase.from('parent_links').select('parent_id, student_id, verified'));
 
@@ -38,7 +38,7 @@ export default function UsersReport() {
       if (type === 'Parent' && byProfile[p.id]) kids.unshift(byProfile[p.id]);
       const teaches = (classes.data || []).filter((c) => c.teacher_id === p.id);
       out.push({
-        key: p.id, type, id: p.staff_code || '', name: p.full_name || '', username: p.username || '',
+        key: p.id, type, id: p.staff_code || '', name: p.full_name || '', gender: p.gender === 'female' ? 'Female' : p.gender === 'male' ? 'Male' : '', username: p.username || '',
         phone: p.phone || '', email: realEmail(p.email), hasLogin: true, created: p.created_at,
         classIds: type === 'Parent' ? kids.map((k) => k.class_id) : teaches.map((c) => c.id),
         classes: type === 'Parent' ? '' : teaches.map((c) => classTag(c)).join(', '),
@@ -48,7 +48,7 @@ export default function UsersReport() {
     for (const s of ss) {
       const p = ps.find((x) => x.id === s.profile_id && x.role === 'student');
       out.push({
-        key: 's-' + s.id, type: 'Student', id: s.student_code || '', adm: s.admission_no || '', name: s.full_name,
+        key: 's-' + s.id, type: 'Student', id: s.student_code || '', adm: s.admission_no || '', name: s.full_name, gender: s.gender === 'female' ? 'Female' : s.gender === 'male' ? 'Male' : '',
         username: p?.username || '', phone: p?.phone || s.whatsapp || s.guardian_phone || '', email: realEmail(p?.email) || s.email || '',
         hasLogin: !!p, created: p?.created_at, classIds: [s.class_id], classes: s.class_id ? classTag(klass(s.class_id)) : 'No class',
         children: '', guardian: s.guardian_name || '', status: s.status,
@@ -66,7 +66,7 @@ export default function UsersReport() {
   const count = (t) => all.filter((u) => u.type === t).length;
 
   const rowsFor = (list) => list.map((u) => ({
-    'User ID': u.id, ...(list.some((x) => x.adm) ? { 'Adm No': u.adm || '' } : {}), Name: u.name, Type: u.type,
+    'User ID': u.id, ...(list.some((x) => x.adm) ? { 'Adm No': u.adm || '' } : {}), Name: u.name, Gender: u.gender, Type: u.type,
     'Class / classes': u.classes || (u.type === 'Parent' ? '' : '—'),
     ...(list.some((x) => x.type === 'Parent') ? { Children: u.children } : {}),
     Username: u.username, 'Sign-in': u.hasLogin ? 'Yes' : 'No login', Phone: u.phone, Email: u.email,
@@ -155,7 +155,7 @@ export default function UsersReport() {
               <input type="checkbox" checked={!off.has(u.key)} onChange={(e) => { const n = new Set(off); if (e.target.checked) n.delete(u.key); else n.add(u.key); setOff(n); }} />
               <span className="pick-name"><b>{u.name || '—'}</b> <span className="muted">{u.id}</span></span>
               <span className="pick-meta small muted">
-                {u.type}{u.classes ? ` · ${u.classes}` : ''}{u.children ? ` · ${u.children}` : ''}
+                {u.type}{u.gender ? ` · ${u.gender}` : ''}{u.classes ? ` · ${u.classes}` : ''}{u.children ? ` · ${u.children}` : ''}
                 {u.username ? ` · @${u.username}` : ''}{!u.hasLogin ? ' · ' : ''}{!u.hasLogin && <b className="low">No login</b>}
               </span>
             </label>

@@ -158,6 +158,10 @@ export default function Users({ me }) {
       const { error: e4 } = await supabase.from('parent_links').insert(c.children.slice(1).map((sid) => ({ parent_id: data.id, student_id: sid, verified: true })));
       if (e4) error = { message: `Login created, but not all children were linked: ${e4.message}` };
     }
+    if (!error && c.role !== 'student' && c.gender) {
+      const { error: eg } = await supabase.from('profiles').update({ gender: c.gender }).eq('id', data.id);
+      if (eg && !/gender/.test(eg.message)) error = { message: `Login created, but gender not saved: ${eg.message}` };
+    }
     if (!error && c.role === 'principal') {
       const { error: e5 } = await supabase.from('profiles').update({ staff_title: 'principal', permissions: PRINCIPAL_PERMS }).eq('id', data.id);
       if (e5) error = { message: e5.message };
@@ -208,10 +212,14 @@ export default function Users({ me }) {
       ({ error } = await supabase.from('profiles').update({ full_name: values.p_full_name, phone: values.p_phone || null, username: u || null }).eq('id', resetting.id));
       note = ' (Name, phone and username only — run update-13.sql in Supabase to also change email and ID.)';
     }
+    if (!error && f.has('gender') && (f.get('gender') || null) !== (resetting.gender || null)) {
+      const { error: eg } = await supabase.from('profiles').update({ gender: f.get('gender') || null }).eq('id', resetting.id);
+      if (eg) note += /gender/.test(eg.message) ? ' (Gender not saved — run update-26.sql in Supabase.)' : ` (Gender not saved: ${eg.message})`;
+    }
     setBusy(false);
     if (error) { setErr(usernameError(error)); return; }
     setSaved('Details saved.' + note);
-    setResetting({ ...resetting, full_name: values.p_full_name || resetting.full_name, phone: values.p_phone, email: values.p_email || resetting.email, username: u || null, staff_code: values.p_staff_code.toUpperCase() || resetting.staff_code });
+    setResetting({ ...resetting, gender: f.has('gender') ? f.get('gender') || null : resetting.gender, full_name: values.p_full_name || resetting.full_name, phone: values.p_phone, email: values.p_email || resetting.email, username: u || null, staff_code: values.p_staff_code.toUpperCase() || resetting.staff_code });
     list.reload();
   }
 
@@ -277,7 +285,7 @@ export default function Users({ me }) {
                 const wa = whatsappLink(p.phone, `Assalamu Alaikum ${p.full_name || ''},`);
                 return (
                   <tr key={p.id}>
-                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}<div className="small muted">{roleLabel(p)}{p.username ? ` · @${p.username}` : ''}</div></td>
+                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}<div className="small muted">{roleLabel(p)}{p.gender ? ` · ${p.gender === 'female' ? 'Female' : 'Male'}` : ''}{p.username ? ` · @${p.username}` : ''}</div></td>
                     <td className="nowrap"><b>{p.staff_code || studentCode[p.id] || <span className="muted">—</span>}</b></td>
                     <td className="small">{realEmail(p.email) || <span className="muted">no email</span>}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
                     <td className="small nowrap">{formatDate(p.created_at)}</td>
@@ -358,6 +366,15 @@ export default function Users({ me }) {
               </label>
             ) : <div />}
             <label>Full name *<input required value={creating.full_name} onChange={(e) => setCreating({ ...creating, full_name: e.target.value })} /></label>
+            {creating.role !== 'student' && (
+              <label>Gender
+                <select value={creating.gender || ''} onChange={(e) => setCreating({ ...creating, gender: e.target.value })}>
+                  <option value="">Not set</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </label>
+            )}
             <label>Mobile / WhatsApp<input inputMode="tel" placeholder="05xxxxxxxx" value={creating.phone} onChange={(e) => setCreating({ ...creating, phone: e.target.value })} /></label>
             <label>Username (optional)<input autoCapitalize="none" placeholder="e.g. their phone number" value={creating.username || ''} onChange={(e) => setCreating({ ...creating, username: e.target.value })} /></label>
             <label>Email (optional)<input type="email" placeholder="leave empty to sign in with ID / phone" value={creating.email} onChange={(e) => setCreating({ ...creating, email: e.target.value })} /></label>
@@ -387,6 +404,15 @@ export default function Users({ me }) {
             <label>Email (optional)<input name="email" type="email" defaultValue={realEmail(resetting.email)} placeholder="leave empty for ID / phone sign-in" /></label>
             {(resetting.role === 'teacher' || resetting.role === 'admin') && (
               <label>Staff ID<input name="staff_code" defaultValue={resetting.staff_code || ''} placeholder="TC1001" style={{ textTransform: 'uppercase' }} /></label>
+            )}
+            {(resetting.role === 'teacher' || resetting.role === 'admin' || resetting.role === 'parent') && (
+              <label>Gender
+                <select name="gender" defaultValue={resetting.gender || ''}>
+                  <option value="">Not set</option>
+                  <option value="male">Male</option>
+                  <option value="female">Female</option>
+                </select>
+              </label>
             )}
             <label>User type
               <select value={resetting.role === 'teacher' && resetting.staff_title ? resetting.staff_title : resetting.role}
