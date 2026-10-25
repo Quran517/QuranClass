@@ -891,3 +891,12 @@ tbody tr:hover td { background: #f8fafe; }
 .tp-item.on { background: #f4efe4; font-weight: 700; color: var(--navy); }
 .tp-item small { color: var(--muted); font-weight: 400; }
 .report-options { margin: 6px 0 14px; } .report-options summary { cursor: pointer; padding: 6px 0; }
+/* ---- ID card print status ---- */
+.print-badge { font-size: .74rem; font-weight: 700; padding: 3px 9px; border-radius: 999px; background: #fff4dc; color: #8a5a00; white-space: nowrap; }
+.print-badge.done { background: #e6f6ed; color: #136c3c; }
+.print-job { position: absolute; left: -10000px; top: 0; width: 220mm; }
+.already-list { margin: 6px 0 10px; padding-left: 18px; max-height: 220px; overflow: auto; }
+.toast-line { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.notice-inline { background: #fff4dc; border-radius: 8px; padding: 8px 12px; }
+@media print { .print-job { display: none !important; } }
+.row-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: nowrap; margin-left: auto; } .row-actions .photo-btn { margin-left: 0; }

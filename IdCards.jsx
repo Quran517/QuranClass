@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import QRCode from 'qrcode';
-import { classTag, resizePhoto } from './util.js';
+import { classTag, resizePhoto, formatDate } from './util.js';
 import { roleLabel } from './perms.js';
 import Modal from './Modal.jsx';
 import { supabase } from './supabase.js';
@@ -145,18 +145,18 @@ export function DigitalCard({ person, onClose }) {
   );
 }
 
-export function printCards(paper = 'a4') {
+export function printCards(paper = 'a4', { from = '.print-area', onDone } = {}) {
   let tag = document.getElementById('card-page-size');
   if (!tag) { tag = document.createElement('style'); tag.id = 'card-page-size'; document.head.appendChild(tag); }
   tag.textContent = `@media print { ${(PAPER[paper] || PAPER.a4).css} }`;
   // copy the cards into a clean top-level container so nothing else prints
-  const src = document.querySelector('.print-area');
+  const src = document.querySelector(from);
   if (!src) return;
   let root = document.getElementById('print-root');
   if (!root) { root = document.createElement('div'); root.id = 'print-root'; document.body.appendChild(root); }
   root.innerHTML = src.outerHTML;
   document.body.classList.add('printing-cards');
-  const done = () => { document.body.classList.remove('printing-cards'); root.innerHTML = ''; window.removeEventListener('afterprint', done); };
+  const done = () => { document.body.classList.remove('printing-cards'); root.innerHTML = ''; window.removeEventListener('afterprint', done); if (onDone) onDone(); };
   window.addEventListener('afterprint', done);
   setTimeout(() => window.print(), 80);
 }
@@ -260,6 +260,16 @@ export default function IdCards({ profile }) {
   const [picked, setPicked] = useState(null); // null = all shown
   const [withBack, setWithBack] = useState(true);
   const [paper, setPaper] = useState('a4');
+  // print status of every card
+  const prints = useQuery(() => supabase.from('card_prints').select('person_kind, person_id, printed_at, print_count')
+    .then((r) => (r.error && /card_prints/.test(r.error.message) ? { data: null, error: null } : r)), [profile.id]);
+  const statusInstalled = prints.data !== null && !prints.loading;
+  const pkind = kind === 'student' ? 'student' : 'staff';
+  const printOf = useMemo(() => Object.fromEntries((prints.data || []).filter((r) => r.person_kind === pkind).map((r) => [r.person_id, r])), [prints.data, pkind]);
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [job, setJob] = useState(null);        // cards being printed now
+  const [confirmJob, setConfirmJob] = useState(null); // { list, already } — reprint warning
+  const [toast, setToast] = useState(null);    // { text, undo }
 
   const classOf = (id) => (classes.data || []).find((c) => c.id === id);
   const teachesWhat = (pid) => (classes.data || []).filter((c) => c.teacher_id === pid).map((c) => c.name).join(', ');
@@ -286,10 +296,38 @@ export default function IdCards({ profile }) {
     }));
   }, [kind, classId, design, students.data, staff.data, classes.data, photoOf]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const shown = people.filter((p) => !q || `${p.name} ${p.code} ${(p.lines || []).join(' ')}`.toLowerCase().includes(q.toLowerCase()));
+  const shown = people
+    .filter((p) => !q || `${p.name} ${p.code} ${(p.lines || []).join(' ')}`.toLowerCase().includes(q.toLowerCase()))
+    .filter((p) => statusFilter === 'all' || (statusFilter === 'printed') === !!printOf[p.id]);
   const selected = picked ? shown.filter((p) => picked[p.id]) : shown;
 
-  useEffect(() => { setPicked(null); }, [kind, classId]);
+  useEffect(() => { setPicked(null); }, [kind, classId, statusFilter]);
+
+  // Print: warn first when a card was printed before
+  function askPrint(list) {
+    const already = list.filter((p) => printOf[p.id]);
+    if (statusInstalled && already.length) setConfirmJob({ list, already });
+    else setJob(list);
+  }
+  async function mark(list) {
+    if (!statusInstalled || !list.length) return;
+    const ids = list.map((p) => p.id);
+    const { error } = await supabase.rpc('mark_cards_printed', { p_kind: pkind, p_ids: ids });
+    if (error) { setToast({ text: `Printed, but the status was not saved: ${error.message}` }); return; }
+    prints.reload();
+    setToast({ text: `${list.length} card${list.length === 1 ? '' : 's'} marked as printed.`, undo: list.filter((p) => !printOf[p.id]).map((p) => p.id) });
+  }
+  async function reset(ids) {
+    const { error } = await supabase.rpc('reset_card_print', { p_kind: pkind, p_ids: ids });
+    if (error) setToast({ text: error.message }); else { prints.reload(); setToast({ text: `${ids.length} card${ids.length === 1 ? '' : 's'} set back to Not printed.` }); }
+  }
+  // the job is drawn off-screen, then printed (QR codes need a moment to draw)
+  useEffect(() => {
+    if (!job) return undefined;
+    const t = setTimeout(() => printCards(paper, { from: '.print-job .print-area', onDone: () => { const list = job; setJob(null); mark(list); } }), 700);
+    return () => clearTimeout(t);
+  }, [job]); // eslint-disable-line react-hooks/exhaustive-deps
+  const nPrinted = people.filter((p) => printOf[p.id]).length;
 
   return (
     <>
@@ -319,12 +357,25 @@ export default function IdCards({ profile }) {
             </select>
           )}
           <input placeholder="Search name or ID…" value={q} onChange={(e) => setQ(e.target.value)} />
+          {statusInstalled && (
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Print status">
+              <option value="all">All cards ({people.length})</option>
+              <option value="not">Not printed ({people.length - nPrinted})</option>
+              <option value="printed">Printed ({nPrinted})</option>
+            </select>
+          )}
           <label className="inline small"><input type="checkbox" checked={withBack} onChange={(e) => setWithBack(e.target.checked)} /> Print back side</label>
           <select value={paper} onChange={(e) => setPaper(e.target.value)} aria-label="Paper size">
             {Object.entries(PAPER).map(([k, v]) => <option key={k} value={k}>Paper: {v.label}</option>)}
           </select>
         </div>
 
+        {prints.data === null && !prints.loading && <p className="small notice-inline">Print status (Printed / Not printed) needs a database update — run <b>update-27.sql</b> in Supabase.</p>}
+        {toast && (
+          <p className="success small toast-line">{toast.text}{' '}
+            {toast.undo?.length > 0 && <button type="button" className="link" onClick={() => { reset(toast.undo); }}>Undo</button>}
+            <button type="button" className="link" onClick={() => setToast(null)}>✕</button></p>
+        )}
         {(students.loading || staff.loading) ? <div className="spinner" /> : shown.length === 0 ? (
           <p className="muted">No {kind === 'student' ? 'enrolled students' : 'staff'} to show.</p>
         ) : (
@@ -349,17 +400,51 @@ export default function IdCards({ profile }) {
                   <span>{p.name} <span className="small muted">{p.code}</span></span>
                   <span className="small muted">{p.summary}</span>
                   <span className={`design-dot ${p.variant}`} title={p.variant === 'girl' ? 'Girls design' : p.variant === 'staff' ? 'Staff design' : 'Boys design'} />
+                  <span className="row-actions">
+                  {statusInstalled && (printOf[p.id]
+                    ? <span className="print-badge done" title={`Printed ${printOf[p.id].print_count} time${printOf[p.id].print_count === 1 ? '' : 's'}`}>✓ Printed {formatDate(printOf[p.id].printed_at)}{printOf[p.id].print_count > 1 ? ` · ${printOf[p.id].print_count}×` : ''}</span>
+                    : <span className="print-badge">Not printed</span>)}
+                  <button type="button" className="btn ghost small" onClick={(e) => { e.preventDefault(); askPrint([p]); }}>🖨 Print</button>
+                  {statusInstalled && printOf[p.id] && (
+                    <button type="button" className="btn ghost small" title="Set back to Not printed" onClick={(e) => { e.preventDefault(); if (window.confirm(`Reset ${p.name}'s card to "Not printed"?`)) reset([p.id]); }}>↺ Reset</button>
+                  )}
                   <button type="button" className="btn ghost small photo-btn" onClick={(e) => { e.preventDefault(); setPhotoFor(p); }}>{p.photo ? '📷 Change' : '📷 Photo'}</button>
+                  </span>
                 </label>
               ))}
             </div>
-            <button className="btn" disabled={!selected.length} onClick={() => printCards(paper)}>
-              Print {selected.length} card{selected.length === 1 ? '' : 's'}
-            </button>
+            <div className="actions">
+              <button className="btn" disabled={!selected.length || !!job} onClick={() => askPrint(selected)}>
+                {job ? 'Opening print…' : `Print ${selected.length} card${selected.length === 1 ? '' : 's'}`}
+              </button>
+              {statusInstalled && selected.some((p) => printOf[p.id]) && (
+                <button className="btn ghost" onClick={() => { const ids = selected.filter((p) => printOf[p.id]).map((p) => p.id); if (window.confirm(`Reset ${ids.length} selected card${ids.length === 1 ? '' : 's'} to "Not printed"?`)) reset(ids); }}>
+                  ↺ Reset print status ({selected.filter((p) => printOf[p.id]).length})
+                </button>
+              )}
+            </div>
           </>
         )}
       </section>
 
+      {confirmJob && (
+        <Modal title="Already printed" onClose={() => setConfirmJob(null)}>
+          <p><b>{confirmJob.already.length} of {confirmJob.list.length}</b> card{confirmJob.list.length === 1 ? '' : 's'} {confirmJob.already.length === 1 ? 'was' : 'were'} printed before:</p>
+          <ul className="small already-list">
+            {confirmJob.already.slice(0, 12).map((p) => <li key={p.id}><b>{p.name}</b> {p.code} — printed {formatDate(printOf[p.id].printed_at)}{printOf[p.id].print_count > 1 ? ` (${printOf[p.id].print_count} times)` : ''}</li>)}
+            {confirmJob.already.length > 12 && <li>… and {confirmJob.already.length - 12} more</li>}
+          </ul>
+          <p className="small muted">Reprint only if a card was lost or damaged.</p>
+          <div className="actions">
+            {confirmJob.list.length > confirmJob.already.length && (
+              <button className="btn" onClick={() => { const l = confirmJob.list.filter((p) => !printOf[p.id]); setConfirmJob(null); setJob(l); }}>Print only the {confirmJob.list.length - confirmJob.already.length} not printed</button>
+            )}
+            <button className="btn danger ghost" onClick={() => { const l = confirmJob.list; setConfirmJob(null); setJob(l); }}>Yes, reprint {confirmJob.list.length === 1 ? 'this card' : `all ${confirmJob.list.length}`}</button>
+            <button className="btn ghost" onClick={() => setConfirmJob(null)}>Cancel</button>
+          </div>
+        </Modal>
+      )}
+      {job && <div className="print-job" aria-hidden="true"><PrintCards people={job} withBack={withBack} paper={paper} /></div>}
       {photoFor && <PhotoModal person={photoFor} onClose={() => setPhotoFor(null)} onSaved={() => { setPhotoFor(null); photos.reload(); }} />}
 
       {selected.length > 0 && (
