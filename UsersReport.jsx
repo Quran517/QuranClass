@@ -97,7 +97,7 @@ export default function UsersReport() {
   async function excel() {
     setBusy('xlsx');
     const groups = TYPES.map(([k, l]) => [l, picked.filter((u) => u.type === k)]).filter(([, g]) => g.length);
-    await downloadExcel(file('xlsx'), [{ name: 'All selected', rows: rowsFor(picked) }, ...groups.map(([l, g]) => ({ name: l, rows: rowsFor(g) }))]);
+    await downloadExcel(file('xlsx'), [{ name: 'All selected', rows: rowsFor(picked) }, ...groups.map(([l, g]) => ({ name: l, rows: rowsFor(g) }))], { title: `Users report — ${label()}`, subtitle: sub() });
     setBusy('');
   }
 

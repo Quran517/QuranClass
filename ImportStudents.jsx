@@ -77,6 +77,19 @@ export default function ImportStudents({ classes, fixedClassId = null, onDone })
 
   const classByName = Object.fromEntries(classes.map((c) => [norm(c.name), c.id]));
 
+  // index of the sheet row that holds the column names (blank rows are skipped by the grid)
+  function rowOffset(sheet, gridIndex) {
+    let seen = -1;
+    const XLSXr = sheet['!ref'] ? sheet['!ref'] : 'A1';
+    const m = XLSXr.match(/\d+$/); const last = m ? +m[0] : 1;
+    for (let r = 0; r < last; r++) {
+      const has = Object.keys(sheet).some((k) => k[0] !== '!' && +k.replace(/^[A-Z]+/, '') === r + 1 && String(sheet[k].v ?? '').trim() !== '');
+      if (has) seen++;
+      if (seen === gridIndex) return r;
+    }
+    return 0;
+  }
+
   async function readFile(e) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -85,7 +98,10 @@ export default function ImportStudents({ classes, fixedClassId = null, onDone })
       const XLSX = await import('xlsx');
       const wb = XLSX.read(await file.arrayBuffer(), { cellDates: true });
       const sheet = wb.Sheets[wb.SheetNames[0]];
-      const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true });
+      // the column names may be lower down (e.g. a formatted report from this site has a title on top)
+      const grid = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', blankrows: false });
+      const headRow = Math.max(0, grid.slice(0, 15).findIndex((r) => r.some((c) => fieldFor(String(c)) === 'full_name')));
+      const raw = XLSX.utils.sheet_to_json(sheet, { defval: '', raw: true, range: rowOffset(sheet, headRow) });
       if (!raw.length) { setErr('The sheet is empty.'); return; }
 
       const headers = Object.keys(raw[0]);

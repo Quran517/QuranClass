@@ -187,7 +187,7 @@ export default function Reports({ profile }) {
         { name: 'Daily summary', rows: dailyRows },
         { name: 'Staff', rows: staffRows },
         { name: 'All records', rows: detailRows },
-      ]);
+      ], { title: `Class report — ${label}`, subtitle: subtitleFor() });
       return;
     }
     if (perClass) {
@@ -202,7 +202,7 @@ export default function Reports({ profile }) {
         { name: 'Daily summary', rows: dailyRows },
         { name: 'Staff', rows: staffRows },
         { name: 'All records', rows: detailRows },
-      ]);
+      ], { title: `Class report — ${label}`, subtitle: subtitleFor() });
       return;
     }
     downloadExcel(fileBase + '.xlsx', [
@@ -212,7 +212,7 @@ export default function Reports({ profile }) {
       { name: 'By teacher', rows: teacherRows },
       { name: 'Staff', rows: staffRows },
       { name: 'All records', rows: detailRows },
-    ]);
+    ], { title: `Class report — ${label}`, subtitle: subtitleFor() });
   }
 
   // shorter headings in the PDF so every row fits on one line
@@ -478,7 +478,7 @@ export default function Reports({ profile }) {
             </button>
             {fileMode === 'register' && (
               <button className="btn ghost" disabled={!data || loading || !chosen.length} onClick={() => {
-                downloadExcel(`attendance-sheet-${registerName()}-${from}-to-${to}.xlsx`, [{ name: 'Attendance sheet', rows: registerRows().rows }]);
+                downloadExcel(`attendance-sheet-${registerName()}-${from}-to-${to}.xlsx`, [{ name: 'Attendance sheet', rows: registerRows().rows }], { title: `Attendance sheet — ${chosen.length === teacherGroups.length ? 'all students' : chosen.map((g) => g.name).join(', ')}`, subtitle: `P = present · L = late · A = absent · E = excused   ·   ${subtitleFor()}` });
               }}>Excel</button>
             )}
             {fileMode === 'list' && (
@@ -486,7 +486,7 @@ export default function Reports({ profile }) {
                 const ids = chosen.flatMap((g) => g.classIds);
                 const rows = pickCols(summaryRows.filter((r, i) => ids.includes(summary[i].class_id)))
                   .sort((a, b) => (a.Teacher || '~').localeCompare(b.Teacher || '~') || (a.Class || '').localeCompare(b.Class || '') || a.Name.localeCompare(b.Name));
-                downloadExcel(`student-list-${from}-to-${to}.xlsx`, [{ name: 'Students', rows }]);
+                downloadExcel(`student-list-${from}-to-${to}.xlsx`, [{ name: 'Students', rows }], { title: `Student list — ${chosen.length === teacherGroups.length ? 'all students' : chosen.map((g) => g.name).join(', ')}`, subtitle: subtitleFor() });
               }}>Excel</button>
             )}
           </div>

@@ -32,16 +32,60 @@ async function logoData() {
 // Excel and PDF downloads. Libraries are loaded only when needed,
 // so the app stays fast on phones.
 
-export async function downloadExcel(filename, sheets) {
-  const XLSX = await import('xlsx');
+// Excel with a proper layout: school title, report name and date at the top,
+// coloured heading row, borders, striped rows, filters, and coloured attendance marks.
+export async function downloadExcel(filename, sheets, { title, subtitle } = {}) {
+  const mod = await import('xlsx-js-style');
+  const XLSX = mod.default || mod;
+  const st = getSettings();
+  const NAVY = '1C2F55', ORANGE = 'E07414', LINE = 'D9D2C3', STRIPE = 'FBF8F2';
+  const border = { top: { style: 'thin', color: { rgb: LINE } }, bottom: { style: 'thin', color: { rgb: LINE } }, left: { style: 'thin', color: { rgb: LINE } }, right: { style: 'thin', color: { rgb: LINE } } };
+  const MARK = { P: ['E6F6ED', '136C3C'], L: ['FFF4DC', '8A5A00'], A: ['FDE8E8', 'B42318'], E: ['E8F0FD', '1D4ED8'], Present: ['E6F6ED', '136C3C'], Late: ['FFF4DC', '8A5A00'], Absent: ['FDE8E8', 'B42318'], Excused: ['E8F0FD', '1D4ED8'] };
+  const reportName = title || filename.replace(/\.xlsx$/i, '').replace(/[-_]+/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
+  const made = `Made ${new Date().toLocaleString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })}`;
   const wb = XLSX.utils.book_new();
   for (const { name, rows } of sheets) {
-    const ws = XLSX.utils.json_to_sheet(rows.length ? rows : [{ Note: 'No records' }]);
-    const keys = Object.keys(rows[0] || { Note: '' });
-    ws['!cols'] = keys.map((k) => ({
-      wch: Math.min(40, Math.max(k.length, ...rows.map((r) => String(r[k] ?? '').length)) + 2),
-    }));
-    XLSX.utils.book_append_sheet(wb, ws, name.slice(0, 31));
+    const list = rows.length ? rows : [{ Note: 'No records' }];
+    const keys = Object.keys(list[0]);
+    const n = keys.length;
+    const top = [
+      [st.school_name || 'Quran Class'],
+      [`${reportName}${name && sheets.length > 1 ? ' — ' + name : ''}`],
+      [[subtitle, `${rows.length} row${rows.length === 1 ? '' : 's'}`, made].filter(Boolean).join('   ·   ')],
+      [],
+    ];
+    const ws = XLSX.utils.aoa_to_sheet([...top, keys, ...list.map((r) => keys.map((k) => r[k] ?? ''))]);
+    const H = top.length; // heading row index (0-based)
+    const cell = (r, c) => XLSX.utils.encode_cell({ r, c });
+    // title rows
+    ws['!merges'] = [0, 1, 2].map((r) => ({ s: { r, c: 0 }, e: { r, c: Math.max(0, n - 1) } }));
+    const put = (r, style) => { for (let c = 0; c < n; c++) { const a = cell(r, c); ws[a] = ws[a] || { t: 's', v: '' }; ws[a].s = style; } };
+    put(0, { font: { bold: true, sz: 16, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: NAVY } }, alignment: { horizontal: 'center', vertical: 'center' } });
+    put(1, { font: { bold: true, sz: 12, color: { rgb: NAVY } }, fill: { fgColor: { rgb: 'F4EFE4' } }, alignment: { horizontal: 'center', vertical: 'center' }, border: { bottom: { style: 'medium', color: { rgb: ORANGE } } } });
+    put(2, { font: { italic: true, sz: 9, color: { rgb: '6B6F7D' } }, alignment: { horizontal: 'center' } });
+    // heading row
+    for (let c = 0; c < n; c++) {
+      ws[cell(H, c)].s = { font: { bold: true, color: { rgb: 'FFFFFF' } }, fill: { fgColor: { rgb: NAVY } }, alignment: { horizontal: 'center', vertical: 'center', wrapText: true }, border };
+    }
+    // data rows
+    list.forEach((r, i) => {
+      const rr = H + 1 + i;
+      keys.forEach((k, c) => {
+        const a = cell(rr, c); if (!ws[a]) ws[a] = { t: 's', v: '' };
+        const v = r[k];
+        const base = { border, fill: { fgColor: { rgb: i % 2 ? STRIPE : 'FFFFFF' } }, alignment: { vertical: 'center', horizontal: typeof v === 'number' ? 'center' : 'left' }, font: { sz: 10 } };
+        const m = typeof v === 'string' && MARK[v];
+        if (m) { base.fill = { fgColor: { rgb: m[0] } }; base.font = { sz: 10, bold: true, color: { rgb: m[1] } }; base.alignment.horizontal = 'center'; }
+        if (/%/.test(k) && typeof v === 'number') base.font = { sz: 10, bold: true, color: { rgb: v >= 75 ? '136C3C' : v >= 50 ? '8A5A00' : 'B42318' } };
+        if (v === '–') base.alignment.horizontal = 'center';
+        ws[a].s = base;
+      });
+    });
+    ws['!cols'] = keys.map((k) => ({ wch: Math.min(40, Math.max(String(k).length + 2, ...list.map((r) => String(r[k] ?? '').length + 2), /^\d{1,2} \w{3}$/.test(k) ? 7 : 6)) }));
+    ws['!rows'] = [{ hpt: 28 }, { hpt: 20 }, { hpt: 16 }, { hpt: 6 }, { hpt: 30 }];
+    ws['!autofilter'] = { ref: XLSX.utils.encode_range({ s: { r: H, c: 0 }, e: { r: H + list.length, c: n - 1 } }) };
+    ws['!views'] = [{ state: 'frozen', ySplit: H + 1, xSplit: 0, topLeftCell: cell(H + 1, 0) }];
+    XLSX.utils.book_append_sheet(wb, ws, String(name || 'Sheet').replace(/[\\/?*[\]:]/g, ' ').slice(0, 31));
   }
   const data = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   saveBlob(new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }), filename);
