@@ -105,6 +105,7 @@ export default function Reports({ profile }) {
 
   const summaryRows = summary.map((s) => ({
     'Student ID': s.student_code, 'Adm No': s.admission_no || '', Name: s.full_name, Class: className(s.class_id), Group: groupOf(s.class_id),
+    Teacher: tName(s.class_id),
     Gender: s.gender === 'female' ? 'Female' : s.gender === 'male' ? 'Male' : '', 'Date of birth': s.date_of_birth ? formatDate(s.date_of_birth) : '', Age: ageOf(s.date_of_birth) ?? '',
     Grade: s.school_grade || '', 'Quran level': s.quran_level || '', Guardian: s.guardian_name || '', 'Guardian phone': s.guardian_phone || '',
     WhatsApp: s.whatsapp || '', Email: s.email || '', 'City / area': s.address || '', Notes: s.notes || '',
@@ -260,13 +261,14 @@ export default function Reports({ profile }) {
   // Class report: teacher at the top, then the students of that teacher's classes.
   const [eachBusy, setEachBusy] = useState('');
   const [picked, setPicked] = useState(null);      // null = all teachers
-  const [oneFile, setOneFile] = useState(false);   // false = one PDF per teacher
+  const [fileMode, setFileMode] = useState('each'); // each = one PDF per teacher, one = one PDF (page per teacher), list = all students in one list
+  const oneFile = fileMode === 'one';
   const [withQr, setWithQr] = useState(true);       // student QR codes in the PDF
   const [ready, setReady] = useState([]);          // the separate teacher PDFs, ready to save
   const chosen = teacherGroups.filter((g) => !picked || picked.includes(g.id));
   // Tick what goes in the class report (saved on this computer)
   const EXTRA = ['Gender', 'Date of birth', 'Age', 'Grade', 'Quran level', 'Guardian', 'Guardian phone', 'WhatsApp', 'Email', 'City / area', 'Notes', 'Status'];
-  const COLS = ['Student ID', 'Adm No', 'Class', 'Group', ...EXTRA, 'Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
+  const COLS = ['Student ID', 'Adm No', 'Class', 'Group', 'Teacher', ...EXTRA, 'Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
   const NEW_OFF = EXTRA; // student details start unticked
   const ATT = ['Present', 'Late', 'Absent', 'Excused', 'Sessions marked', 'Attendance %'];
   const PARTS = [['teacherLine', 'Teacher phone, classes & attendance line'], ['classesTable', 'Classes table']];
@@ -293,6 +295,19 @@ export default function Reports({ profile }) {
   async function classReports() {
     if (!chosen.length) return;
     setReady([]);
+    if (fileMode === 'list') {
+      // every chosen student in one table — sorted by teacher, class, then name
+      const ids = chosen.flatMap((g) => g.classIds);
+      const rows = summary.map((x, i) => [x, summaryRows[i]]).filter(([x]) => ids.includes(x.class_id))
+        .sort(([a, ra], [b, rb]) => (ra.Teacher || '~').localeCompare(rb.Teacher || '~') || (ra.Class || '').localeCompare(rb.Class || '') || (a.full_name || '').localeCompare(b.full_name || ''));
+      const picked = pickCols(rows.map(([, r]) => r));
+      await downloadPdf(`student-list-${chosen.length === teacherGroups.length ? 'all' : chosen.length + '-teachers'}-${from}-to-${to}.pdf`, {
+        title: `Student list — ${chosen.length === teacherGroups.length ? 'all students' : chosen.map((g) => g.name).join(', ')}`,
+        subtitle: `${picked.length} students   ·   ${subtitleFor()}`,
+        tables: [{ heading: `Students (${picked.length})`, ...tbl(picked, 'Student'), barcode: withQr ? rows.map(([x]) => x.student_code || '') : undefined }],
+      });
+      return;
+    }
     if (oneFile || chosen.length === 1) {
       const one = chosen.length === 1;
       await downloadPdf(`class-report-${one ? chosen[0].name.replace(/[^\w]+/g, '-').toLowerCase() : 'teachers'}-${from}-to-${to}.pdf`, {
@@ -419,15 +434,25 @@ export default function Reports({ profile }) {
             </div>
           </details>
           <div className="actions">
-            {chosen.length > 1 && (
-              <select value={oneFile ? 'one' : 'each'} onChange={(e) => setOneFile(e.target.value === 'one')} aria-label="PDF files" className="split-select">
-                <option value="each">A separate PDF for each teacher ({chosen.length} files)</option>
-                <option value="one">One PDF — each teacher on a new page</option>
-              </select>
-            )}
+            <select value={fileMode} onChange={(e) => setFileMode(e.target.value)} aria-label="PDF files" className="split-select">
+              {chosen.length > 1 && <option value="each">A separate PDF for each teacher ({chosen.length} files)</option>}
+              {chosen.length > 1 && <option value="one">One PDF — each teacher on a new page</option>}
+              {chosen.length <= 1 && <option value="each">Class report for this teacher</option>}
+              <option value="list">All students in one list (one table)</option>
+            </select>
             <button className="btn" onClick={classReports} disabled={!data || loading || !chosen.length || !!eachBusy}>
-              {eachBusy ? `Preparing ${eachBusy}…` : chosen.length === 1 ? `Download class report — ${chosen[0].name}` : `Download class report${oneFile ? '' : 's'} (${chosen.length} teachers)`}
+              {eachBusy ? `Preparing ${eachBusy}…`
+                : fileMode === 'list' ? `Download student list (${chosen.reduce((n, g) => n + studentsOf(g.classIds).length, 0)} students)`
+                : chosen.length === 1 ? `Download class report — ${chosen[0].name}` : `Download class report${oneFile ? '' : 's'} (${chosen.length} teachers)`}
             </button>
+            {fileMode === 'list' && (
+              <button className="btn ghost" disabled={!data || loading || !chosen.length} onClick={() => {
+                const ids = chosen.flatMap((g) => g.classIds);
+                const rows = pickCols(summaryRows.filter((r, i) => ids.includes(summary[i].class_id)))
+                  .sort((a, b) => (a.Teacher || '~').localeCompare(b.Teacher || '~') || (a.Class || '').localeCompare(b.Class || '') || a.Name.localeCompare(b.Name));
+                downloadExcel(`student-list-${from}-to-${to}.xlsx`, [{ name: 'Students', rows }]);
+              }}>Excel</button>
+            )}
           </div>
           {ready.length > 0 && (
             <div className="ready-files">
