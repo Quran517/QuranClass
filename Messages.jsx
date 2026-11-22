@@ -9,6 +9,7 @@ const TEMPLATES = [
   ['Class cancelled', 'Assalamu Alaikum {guardian},\n\nPlease note there will be no Quran class on __________.\n\nJazakAllahu khairan,\n{school}'],
   ['Holiday', 'Assalamu Alaikum {guardian},\n\nThe Quran class will be closed from ________ to ________ for the holiday. Classes resume on ________, in shaa Allah.\n\n{school}'],
   ['Reminder', 'Assalamu Alaikum {guardian},\n\nA kind reminder that {student} has Quran class ({class}). Please make sure {student} attends on time.\n\nJazakAllahu khairan,\n{school}'],
+  ['Absent from class', 'Assalamu Alaikum {guardian},\n\n{student} ({class}) did not attend the Quran class on {date}. We hope all is well. Please make sure {student} attends the next class, in shaa Allah.\n\nIf there is a reason for the absence, please reply to this message.\n\nJazakAllahu khairan,\n{school}'],
   ['Low attendance', 'Assalamu Alaikum {guardian},\n\n{student}\'s attendance in the Quran class has been low recently. Please contact us if there is any difficulty.\n\nJazakAllahu khairan,\n{school}'],
 ];
 
@@ -18,6 +19,7 @@ const fill = (text, r, school) =>
     .replaceAll('{student}', r.name)
     .replaceAll('{class}', r.className || 'Quran class')
     .replaceAll('{code}', r.code || '')
+    .replaceAll('{date}', r.date || 'the last class day')
     .replaceAll('{school}', school);
 
 function download(name, text, type) {
@@ -33,6 +35,11 @@ export default function Messages({ profile }) {
   const [students, setStudents] = useState(null);
   const [absentToday, setAbsentToday] = useState(new Set());
   const [lastClass, setLastClass] = useState(null);
+  const [classDays, setClassDays] = useState([]);   // dates that have attendance marked
+  const [missDate, setMissDate] = useState('');     // date for "did not attend"
+  const [missed, setMissed] = useState(null);       // { date, ids: Set } students who did not attend that day
+  const [lowAtt, setLowAtt] = useState(null);       // Map student_id -> % (below 75%)
+  const [allAtt, setAllAtt] = useState([]);
   const [err, setErr] = useState('');
   const [group, setGroup] = useState('all');
   const [subject, setSubject] = useState('');
@@ -63,6 +70,15 @@ export default function Messages({ profile }) {
           const { data: abs } = await supabase.from('attendance').select('student_id').eq('att_date', lastDate).eq('status', 'absent');
           setAbsentToday(new Set((abs || []).map((a) => a.student_id)));
         }
+        // every marked attendance (to find who did not come, and low attendance)
+        const att = await fetchAllRows(() => supabase.from('attendance').select('student_id, class_id, att_date, status'));
+        setAllAtt(att);
+        const days = [...new Set(att.map((x) => x.att_date))].sort().reverse();
+        setClassDays(days);
+        setMissDate(days[0] || '');
+        const per = {};
+        for (const x of att) { per[x.student_id] ||= { ok: 0, all: 0 }; per[x.student_id].all += 1; if (x.status === 'present' || x.status === 'late') per[x.student_id].ok += 1; }
+        setLowAtt(new Map(Object.entries(per).filter(([, v]) => v.all >= 3 && v.ok / v.all < 0.75).map(([k, v]) => [k, Math.round((v.ok / v.all) * 100)])));
       } catch (e) {
         setErr(e.message);
         setStudents([]);
@@ -72,24 +88,36 @@ export default function Messages({ profile }) {
 
   const classById = useMemo(() => Object.fromEntries(classes.map((c) => [c.id, c])), [classes]);
 
+  // Did not attend on a date: absent, or not scanned at all, in a class that had attendance taken that day
+  useEffect(() => {
+    if (!missDate || !students) { setMissed(null); return; }
+    const att = allAtt.filter((x) => x.att_date === missDate);
+    const heldIn = new Set(att.map((x) => x.class_id));
+    const came = new Set(att.filter((x) => x.status === 'present' || x.status === 'late').map((x) => x.student_id));
+    const excused = new Set(att.filter((x) => x.status === 'excused').map((x) => x.student_id));
+    setMissed({ date: missDate, ids: new Set(students.filter((st) => heldIn.has(st.class_id) && !came.has(st.id) && !excused.has(st.id)).map((st) => st.id)) });
+  }, [missDate, students, allAtt]);
+
   const recipients = useMemo(() => {
     if (!students) return [];
     return students
-      .filter((s) => group === 'all' || (group === 'absent' ? absentToday.has(s.id) : group === 'none' ? !s.class_id : s.class_id === group))
+      .filter((s) => group === 'all' || (group === 'missed' ? !!missed?.ids.has(s.id) : group === 'low' ? !!lowAtt?.has(s.id) : group === 'absent' ? absentToday.has(s.id) : group === 'none' ? !s.class_id : s.class_id === group))
       .map((s) => ({
         id: s.id, name: s.full_name, code: s.student_code, guardian: s.guardian_name,
         className: classById[s.class_id]?.name || '',
+        date: group === 'missed' && missed ? formatDate(missed.date) : '',
+        note: group === 'low' && lowAtt?.has(s.id) ? `${lowAtt.get(s.id)}% attendance` : '',
         phone: waNumber(s.whatsapp || s.guardian_phone),
         email: realEmail(s.email || ''),
       }));
-  }, [students, group, absentToday, classById]);
+  }, [students, group, absentToday, classById, missed, lowAtt]);
 
   const withPhone = recipients.filter((r) => r.phone);
   const emails = [...new Set(recipients.map((r) => r.email).filter(Boolean))];
   const school = settings.school_name;
   const sample = recipients[0] || { name: 'Abdullah', guardian: 'Ahmed', className: 'Hifz A', code: 'QC1001' };
   const emailBody = text.replaceAll('{guardian}', 'Parent').replaceAll('{student}', 'your child')
-    .replaceAll('{class}', 'the Quran class').replaceAll('{code}', '').replaceAll('{school}', school);
+    .replaceAll('{class}', 'the Quran class').replaceAll('{code}', '').replaceAll('{date}', group === 'missed' && missed ? formatDate(missed.date) : 'the last class day').replaceAll('{school}', school);
 
   // Some email apps can't open very long links, so emails are sent in groups of 40 (BCC = private).
   const emailGroups = [];
@@ -127,10 +155,20 @@ export default function Messages({ profile }) {
             <select value={group} onChange={(e) => { setGroup(e.target.value); setSent({}); }}>
               <option value="all">All parents</option>
               {classes.map((c) => <option key={c.id} value={c.id}>Class: {c.name}{c.group_name ? ` (${c.group_name})` : ''}</option>)}
-              <option value="absent">Parents of students absent at last class{lastClass ? ` (${formatDate(lastClass)})` : ''}</option>
+              <option value="missed">Students who did NOT attend a class day (absent or not scanned)</option>
+              <option value="low">Students with low attendance (below 75%)</option>
+              <option value="absent">Parents of students marked absent at last class{lastClass ? ` (${formatDate(lastClass)})` : ''}</option>
               {(profile.role === 'admin' || (profile.permissions || []).includes('messages')) && <option value="none">Students with no class</option>}
             </select>
           </label>
+          {group === 'missed' && (
+            <label>Class day
+              <select value={missDate} onChange={(e) => { setMissDate(e.target.value); setSent({}); }}>
+                {classDays.length === 0 && <option value="">No attendance marked yet</option>}
+                {classDays.map((d) => <option key={d} value={d}>{formatDate(d)}</option>)}
+              </select>
+            </label>
+          )}
           <label>Template
             <select onChange={(e) => { const t = TEMPLATES[e.target.value]; setText(t[1]); if (!subject) setSubject(t[0] === 'Blank' ? '' : t[0]); }} defaultValue="0">
               {TEMPLATES.map(([n], i) => <option key={n} value={i}>{n}</option>)}
@@ -143,7 +181,7 @@ export default function Messages({ profile }) {
           </label>
         </div>
         <p className="small muted">
-          Personal words (WhatsApp): <code>{'{guardian}'}</code> parent's name · <code>{'{student}'}</code> student · <code>{'{class}'}</code> class · <code>{'{code}'}</code> student ID · <code>{'{school}'}</code> school name.
+          Personal words (WhatsApp): <code>{'{guardian}'}</code> parent's name · <code>{'{student}'}</code> student · <code>{'{date}'}</code> the class day · <code>{'{class}'}</code> class · <code>{'{code}'}</code> student ID · <code>{'{school}'}</code> school name.
         </p>
         {text && (
           <div className="msg-preview">
@@ -194,7 +232,7 @@ export default function Messages({ profile }) {
               <div className="pick-list msg-list">
                 {withPhone.map((r) => (
                   <div key={r.id} className={`pick-row ${sent[r.id] ? 'done' : ''}`}>
-                    <span>{r.guardian || 'Parent'} <span className="small muted">· {r.name} {r.code}{r.className ? ` · ${r.className}` : ''}</span></span>
+                    <span>{r.guardian || 'Parent'} <span className="small muted">· {r.name} {r.code}{r.className ? ` · ${r.className}` : ''}{r.note ? ` · ${r.note}` : ''}</span></span>
                     <a className={`btn small ${sent[r.id] ? 'ghost' : 'whatsapp'}`} target="_blank" rel="noreferrer"
                       href={whatsappLink(r.phone, fill(text, r, school))}
                       onClick={() => setSent((x) => ({ ...x, [r.id]: true }))}>
