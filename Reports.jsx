@@ -292,9 +292,38 @@ export default function Reports({ profile }) {
       { heading: 'Student details', ...tbl(pickCols(studentsOf(g.classIds)), 'Student'), barcode: qrOf(g.classIds), fitPage: true },
     ];
   };
+  // Attendance sheet: one row per student, one column per class date (P / L / A / E)
+  const registerRows = () => {
+    const ids = chosen.flatMap((g) => g.classIds);
+    const att = (data?.att || []).filter((x) => ids.includes(x.class_id));
+    const dates = [...new Set(att.map((x) => x.att_date))].sort();
+    const mark = {};
+    for (const x of att) mark[x.student_id + '|' + x.att_date] = { present: 'P', late: 'L', absent: 'A', excused: 'E' }[x.status] || '';
+    const dl = (d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+    const rows = summary.filter((x) => ids.includes(x.class_id))
+      .map((x) => ({ x, t: tName(x.class_id), c: className(x.class_id) }))
+      .sort((a, b) => (a.t || '~').localeCompare(b.t || '~') || a.c.localeCompare(b.c) || (a.x.full_name || '').localeCompare(b.x.full_name || ''))
+      .map(({ x, t, c }) => ({
+        'Student ID': x.student_code || '', 'Adm No': x.admission_no || '', Name: x.full_name, Class: c, Teacher: t,
+        ...Object.fromEntries(dates.map((d) => [dl(d), mark[x.id + '|' + d] || '–'])),
+        P: x.present, L: x.late, A: x.absent, E: x.excused, '%': pct(x.present + x.late, x.total),
+      }));
+    return { rows, dates };
+  };
+  const registerName = () => (chosen.length === teacherGroups.length ? 'all-students' : chosen.length === 1 ? chosen[0].name.replace(/[^\w]+/g, '-').toLowerCase() : chosen.length + '-teachers');
+
   async function classReports() {
     if (!chosen.length) return;
     setReady([]);
+    if (fileMode === 'register') {
+      const { rows, dates } = registerRows();
+      await downloadPdf(`attendance-sheet-${registerName()}-${from}-to-${to}.pdf`, {
+        title: `Attendance sheet — ${chosen.length === teacherGroups.length ? 'all students' : chosen.map((g) => g.name).join(', ')}`,
+        subtitle: `${rows.length} students · ${dates.length} class days   ·   ${subtitleFor()}`,
+        tables: [{ heading: 'P = present   L = late   A = absent   E = excused   – = not marked', ...tbl(rows, 'Student'), compact: true }],
+      });
+      return;
+    }
     if (fileMode === 'list') {
       // every chosen student in one table — sorted by teacher, class, then name
       const ids = chosen.flatMap((g) => g.classIds);
@@ -439,12 +468,19 @@ export default function Reports({ profile }) {
               {chosen.length > 1 && <option value="one">One PDF — each teacher on a new page</option>}
               {chosen.length <= 1 && <option value="each">Class report for this teacher</option>}
               <option value="list">All students in one list (one table)</option>
+              <option value="register">Attendance sheet — every date in one sheet</option>
             </select>
             <button className="btn" onClick={classReports} disabled={!data || loading || !chosen.length || !!eachBusy}>
               {eachBusy ? `Preparing ${eachBusy}…`
+                : fileMode === 'register' ? `Download attendance sheet (${chosen.reduce((n, g) => n + studentsOf(g.classIds).length, 0)} students)`
                 : fileMode === 'list' ? `Download student list (${chosen.reduce((n, g) => n + studentsOf(g.classIds).length, 0)} students)`
                 : chosen.length === 1 ? `Download class report — ${chosen[0].name}` : `Download class report${oneFile ? '' : 's'} (${chosen.length} teachers)`}
             </button>
+            {fileMode === 'register' && (
+              <button className="btn ghost" disabled={!data || loading || !chosen.length} onClick={() => {
+                downloadExcel(`attendance-sheet-${registerName()}-${from}-to-${to}.xlsx`, [{ name: 'Attendance sheet', rows: registerRows().rows }]);
+              }}>Excel</button>
+            )}
             {fileMode === 'list' && (
               <button className="btn ghost" disabled={!data || loading || !chosen.length} onClick={() => {
                 const ids = chosen.flatMap((g) => g.classIds);
