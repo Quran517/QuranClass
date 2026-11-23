@@ -9,7 +9,7 @@ const TEMPLATES = [
   ['Class cancelled', 'Assalamu Alaikum {guardian},\n\nPlease note there will be no Quran class on __________.\n\nJazakAllahu khairan,\n{school}'],
   ['Holiday', 'Assalamu Alaikum {guardian},\n\nThe Quran class will be closed from ________ to ________ for the holiday. Classes resume on ________, in shaa Allah.\n\n{school}'],
   ['Reminder', 'Assalamu Alaikum {guardian},\n\nA kind reminder that {student} has Quran class ({class}). Please make sure {student} attends on time.\n\nJazakAllahu khairan,\n{school}'],
-  ['Absent from class', 'Assalamu Alaikum {guardian},\n\n{student} ({class}) did not attend the Quran class on {date}. We hope all is well. Please make sure {student} attends the next class, in shaa Allah.\n\nIf there is a reason for the absence, please reply to this message.\n\nJazakAllahu khairan,\n{school}'],
+  ['Absent from class', 'Assalamu Alaikum {guardian},\n\n{student} ({class}) did not attend the Quran class on {date} ({missed}). We hope all is well. Please make sure {student} attends the next class, in shaa Allah.\n\nIf there is a reason for the absence, please reply to this message.\n\nJazakAllahu khairan,\n{school}'],
   ['Low attendance', 'Assalamu Alaikum {guardian},\n\n{student}\'s attendance in the Quran class has been low recently. Please contact us if there is any difficulty.\n\nJazakAllahu khairan,\n{school}'],
 ];
 
@@ -20,6 +20,7 @@ const fill = (text, r, school) =>
     .replaceAll('{class}', r.className || 'Quran class')
     .replaceAll('{code}', r.code || '')
     .replaceAll('{date}', r.date || 'the last class day')
+    .replaceAll('{missed}', r.missedText || '')
     .replaceAll('{school}', school);
 
 function download(name, text, type) {
@@ -36,7 +37,9 @@ export default function Messages({ profile }) {
   const [absentToday, setAbsentToday] = useState(new Set());
   const [lastClass, setLastClass] = useState(null);
   const [classDays, setClassDays] = useState([]);   // dates that have attendance marked
-  const [missDate, setMissDate] = useState('');     // date for "did not attend"
+  const [missDate, setMissDate] = useState('');     // "did not attend": to this class day
+  const [missFrom, setMissFrom] = useState('');     // … from this class day
+  const [missMin, setMissMin] = useState('1');      // missed at least N days ('all' = every day)
   const [missed, setMissed] = useState(null);       // { date, ids: Set } students who did not attend that day
   const [lowAtt, setLowAtt] = useState(null);       // Map student_id -> % (below 75%)
   const [allAtt, setAllAtt] = useState([]);
@@ -76,6 +79,7 @@ export default function Messages({ profile }) {
         const days = [...new Set(att.map((x) => x.att_date))].sort().reverse();
         setClassDays(days);
         setMissDate(days[0] || '');
+        setMissFrom(days[Math.min(3, days.length - 1)] || ''); // last 4 class days
         const per = {};
         for (const x of att) { per[x.student_id] ||= { ok: 0, all: 0 }; per[x.student_id].all += 1; if (x.status === 'present' || x.status === 'late') per[x.student_id].ok += 1; }
         setLowAtt(new Map(Object.entries(per).filter(([, v]) => v.all >= 3 && v.ok / v.all < 0.75).map(([k, v]) => [k, Math.round((v.ok / v.all) * 100)])));
@@ -90,13 +94,24 @@ export default function Messages({ profile }) {
 
   // Did not attend on a date: absent, or not scanned at all, in a class that had attendance taken that day
   useEffect(() => {
-    if (!missDate || !students) { setMissed(null); return; }
-    const att = allAtt.filter((x) => x.att_date === missDate);
-    const heldIn = new Set(att.map((x) => x.class_id));
-    const came = new Set(att.filter((x) => x.status === 'present' || x.status === 'late').map((x) => x.student_id));
-    const excused = new Set(att.filter((x) => x.status === 'excused').map((x) => x.student_id));
-    setMissed({ date: missDate, ids: new Set(students.filter((st) => heldIn.has(st.class_id) && !came.has(st.id) && !excused.has(st.id)).map((st) => st.id)) });
-  }, [missDate, students, allAtt]);
+    if (!missDate || !missFrom || !students) { setMissed(null); return; }
+    const [lo, hi] = missFrom <= missDate ? [missFrom, missDate] : [missDate, missFrom];
+    const att = allAtt.filter((x) => x.att_date >= lo && x.att_date <= hi);
+    const held = {};      // class_id -> Set(dates attendance was taken)
+    const ok = new Set(); // student|date that came (present, late) or were excused
+    for (const x of att) {
+      (held[x.class_id] ||= new Set()).add(x.att_date);
+      if (x.status === 'present' || x.status === 'late' || x.status === 'excused') ok.add(x.student_id + '|' + x.att_date);
+    }
+    const info = new Map();
+    for (const st of students) {
+      const days = [...(held[st.class_id] || [])].sort();
+      const miss = days.filter((d) => !ok.has(st.id + '|' + d));
+      const need = missMin === 'all' ? days.length : Number(missMin);
+      if (days.length && miss.length && miss.length >= need) info.set(st.id, { missed: miss.length, held: days.length, dates: miss });
+    }
+    setMissed({ from: lo, to: hi, info, ids: new Set(info.keys()) });
+  }, [missDate, missFrom, missMin, students, allAtt]);
 
   const recipients = useMemo(() => {
     if (!students) return [];
@@ -105,8 +120,9 @@ export default function Messages({ profile }) {
       .map((s) => ({
         id: s.id, name: s.full_name, code: s.student_code, guardian: s.guardian_name,
         className: classById[s.class_id]?.name || '',
-        date: group === 'missed' && missed ? formatDate(missed.date) : '',
-        note: group === 'low' && lowAtt?.has(s.id) ? `${lowAtt.get(s.id)}% attendance` : '',
+        date: group === 'missed' && missed?.info.get(s.id) ? missed.info.get(s.id).dates.map((d) => new Date(d + 'T00:00:00').toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })).join(', ') : '',
+        missedText: group === 'missed' && missed?.info.get(s.id) ? `missed ${missed.info.get(s.id).missed} of ${missed.info.get(s.id).held} classes` : '',
+        note: group === 'low' && lowAtt?.has(s.id) ? `${lowAtt.get(s.id)}% attendance` : group === 'missed' && missed?.info.get(s.id) ? `missed ${missed.info.get(s.id).missed} of ${missed.info.get(s.id).held}` : '',
         phone: waNumber(s.whatsapp || s.guardian_phone),
         email: realEmail(s.email || ''),
       }));
@@ -117,7 +133,7 @@ export default function Messages({ profile }) {
   const school = settings.school_name;
   const sample = recipients[0] || { name: 'Abdullah', guardian: 'Ahmed', className: 'Hifz A', code: 'QC1001' };
   const emailBody = text.replaceAll('{guardian}', 'Parent').replaceAll('{student}', 'your child')
-    .replaceAll('{class}', 'the Quran class').replaceAll('{code}', '').replaceAll('{date}', group === 'missed' && missed ? formatDate(missed.date) : 'the last class day').replaceAll('{school}', school);
+    .replaceAll('{class}', 'the Quran class').replaceAll('{code}', '').replaceAll('{date}', group === 'missed' && missed ? `between ${formatDate(missed.from)} and ${formatDate(missed.to)}` : 'the last class day').replaceAll('{missed}', '').replaceAll('{school}', school);
 
   // Some email apps can't open very long links, so emails are sent in groups of 40 (BCC = private).
   const emailGroups = [];
@@ -155,19 +171,36 @@ export default function Messages({ profile }) {
             <select value={group} onChange={(e) => { setGroup(e.target.value); setSent({}); }}>
               <option value="all">All parents</option>
               {classes.map((c) => <option key={c.id} value={c.id}>Class: {c.name}{c.group_name ? ` (${c.group_name})` : ''}</option>)}
-              <option value="missed">Students who did NOT attend a class day (absent or not scanned)</option>
+              <option value="missed">Students who did NOT attend (choose the class days)</option>
               <option value="low">Students with low attendance (below 75%)</option>
               <option value="absent">Parents of students marked absent at last class{lastClass ? ` (${formatDate(lastClass)})` : ''}</option>
               {(profile.role === 'admin' || (profile.permissions || []).includes('messages')) && <option value="none">Students with no class</option>}
             </select>
           </label>
           {group === 'missed' && (
-            <label>Class day
-              <select value={missDate} onChange={(e) => { setMissDate(e.target.value); setSent({}); }}>
-                {classDays.length === 0 && <option value="">No attendance marked yet</option>}
-                {classDays.map((d) => <option key={d} value={d}>{formatDate(d)}</option>)}
-              </select>
-            </label>
+            <div className="span2 miss-range">
+              <label>From class day
+                <select value={missFrom} onChange={(e) => { setMissFrom(e.target.value); setSent({}); }}>
+                  {classDays.length === 0 && <option value="">No attendance marked yet</option>}
+                  {classDays.map((d) => <option key={d} value={d}>{formatDate(d)}</option>)}
+                </select>
+              </label>
+              <label>To class day
+                <select value={missDate} onChange={(e) => { setMissDate(e.target.value); setSent({}); }}>
+                  {classDays.length === 0 && <option value="">No attendance marked yet</option>}
+                  {classDays.map((d) => <option key={d} value={d}>{formatDate(d)}</option>)}
+                </select>
+              </label>
+              <label>Missed
+                <select value={missMin} onChange={(e) => { setMissMin(e.target.value); setSent({}); }}>
+                  <option value="1">1 class or more</option>
+                  <option value="2">2 classes or more</option>
+                  <option value="3">3 classes or more</option>
+                  <option value="all">Every class (did not come at all)</option>
+                </select>
+              </label>
+              <p className="small muted span3">{missed ? `${missed.ids.size} student${missed.ids.size === 1 ? '' : 's'} missed class between ${formatDate(missed.from)} and ${formatDate(missed.to)} — absent or not scanned (excused students are left out).` : ''}</p>
+            </div>
           )}
           <label>Template
             <select onChange={(e) => { const t = TEMPLATES[e.target.value]; setText(t[1]); if (!subject) setSubject(t[0] === 'Blank' ? '' : t[0]); }} defaultValue="0">
@@ -181,7 +214,7 @@ export default function Messages({ profile }) {
           </label>
         </div>
         <p className="small muted">
-          Personal words (WhatsApp): <code>{'{guardian}'}</code> parent's name · <code>{'{student}'}</code> student · <code>{'{date}'}</code> the class day · <code>{'{class}'}</code> class · <code>{'{code}'}</code> student ID · <code>{'{school}'}</code> school name.
+          Personal words (WhatsApp): <code>{'{guardian}'}</code> parent's name · <code>{'{student}'}</code> student · <code>{'{date}'}</code> the days missed · <code>{'{missed}'}</code> e.g. “missed 2 of 4 classes” · <code>{'{class}'}</code> class · <code>{'{code}'}</code> student ID · <code>{'{school}'}</code> school name.
         </p>
         {text && (
           <div className="msg-preview">

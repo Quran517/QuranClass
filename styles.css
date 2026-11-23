@@ -900,3 +900,6 @@ tbody tr:hover td { background: #f8fafe; }
 .notice-inline { background: #fff4dc; border-radius: 8px; padding: 8px 12px; }
 @media print { .print-job { display: none !important; } }
 .row-actions { display: inline-flex; align-items: center; gap: 6px; flex-wrap: nowrap; margin-left: auto; } .row-actions .photo-btn { margin-left: 0; }
+.miss-range { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.miss-range .span3 { grid-column: 1 / -1; margin: 0; }
+@media (max-width: 640px) { .miss-range { grid-template-columns: 1fr; } }
