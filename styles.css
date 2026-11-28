@@ -967,3 +967,19 @@ tr.fam-first td { border-top: 2px solid #e0d6c2; }
 @media (max-width: 520px) { .stmt-sum { grid-template-columns: 1fr; } .fin-kpi b { font-size: 1.2rem; } }
 .fin-table td.acts { min-width: 210px; } .fin-table td.acts > * { margin: 2px 0; }
 tr.inactive-row td { opacity: .6; } .fpill + .fpill, td .fpill { margin-left: 6px; }
+/* ---- create student logins: grouped list ---- */
+.lg-list { max-height: 52vh; overflow: auto; display: grid; gap: 8px; margin: 8px 0; }
+.lg-group { border: 1px solid var(--line); border-radius: 12px; overflow: hidden; background: #fff; }
+.lg-gh { display: flex; align-items: center; gap: 10px; padding: 9px 12px; background: var(--navy, #1c2f55); color: #fff; }
+.lg-group.none .lg-gh { background: #6b6f7d; }
+.lg-gh input { width: 18px; height: 18px; accent-color: #e07414; flex: none; }
+.lg-title { background: none; border: 0; color: inherit; font: inherit; text-align: left; cursor: pointer; padding: 0; flex: 1; }
+.lg-title span { opacity: .8; font-size: .85rem; }
+.lg-cnt { font-size: .76rem; background: #ffffff22; padding: 2px 9px; border-radius: 999px; white-space: nowrap; }
+label.lg-row, .lg-row { display: flex; flex-direction: row; align-items: center; gap: 10px; padding: 8px 12px 8px 34px; border-top: 1px solid #f1ebdf; margin: 0; font-weight: 400; flex-wrap: wrap; cursor: pointer; }
+.lg-row.off { opacity: .55; }
+.lg-row input { width: 17px; height: 17px; flex: none; }
+.lg-head { border: 1px solid var(--line); border-radius: 10px; }
+.lg-row .pick-name { flex: 1 1 200px; }
+.lg-row .pick-meta { flex: 0 1 auto; text-align: right; }
+.pick-head.lg-head label { flex-direction: row; align-items: center; gap: 8px; margin: 0; }

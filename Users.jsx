@@ -42,7 +42,7 @@ export default function Users({ me }) {
   const linked = useQuery(() => supabase.from('students').select('profile_id, student_code, full_name, guardian_phone, whatsapp').not('profile_id', 'is', null));
   const studentCode = Object.fromEntries((linked.data || []).map((s) => [s.profile_id, s.student_code]));
   const freeStudents = useQuery(() =>
-    supabase.from('students').select('id, full_name, student_code, email, guardian_phone, whatsapp, class_id, status')
+    supabase.from('students').select('id, full_name, student_code, email, guardian_name, guardian_phone, whatsapp, class_id, status, date_of_birth')
       .is('profile_id', null).neq('status', 'rejected').order('full_name'));
   const [q, setQ] = useState('');
   const [role, setRole] = useState('');
@@ -584,21 +584,46 @@ function ParentLinks({ parent, students, onClose }) {
 // Create logins for many students at once. Each student signs in with their
 // Student ID (e.g. QC1001) and the password shown here.
 function BulkStudentLogins({ students, classes, onClose }) {
-  const [classId, setClassId] = useState('all');
+  const [groupBy, setGroupBy] = useState('family'); // 'family' = registered parent mobile, 'class'
+  const [q, setQ] = useState('');
   const [off, setOff] = useState(new Set());
+  const [openG, setOpenG] = useState(new Set());
   const [busy, setBusy] = useState('');
-  const [done, setDone] = useState(null); // [{ student, password, username, error }]
+  const [done, setDone] = useState(null); // [{ s, password, username, note, error }]
   const [signIn, setSignIn] = useState('phone'); // 'phone' = parent's mobile number, 'id' = Student ID only
   const [pwMode, setPwMode] = useState('random'); // 'random' or 'phone'
   const cls = (id) => classes.find((c) => c.id === id);
   const parentPhone = (s) => s.guardian_phone || s.whatsapp || '';
-  const shown = students.filter((s) => classId === 'all' || (classId === 'none' ? !s.class_id : s.class_id === classId));
-  const picked = shown.filter((s) => !off.has(s.id));
+  const byAge = (a, b) => String(a.date_of_birth || '9999').localeCompare(String(b.date_of_birth || '9999')) || a.full_name.localeCompare(b.full_name);
+  const list = students.filter((s) => !q || `${s.full_name} ${s.student_code} ${parentPhone(s)} ${s.guardian_name || ''}`.toLowerCase().includes(q.toLowerCase()));
+
+  // groups: one per registered parent mobile (brothers & sisters together), or one per class
+  const groups = useMemo(() => {
+    const m = new Map();
+    for (const s of list) {
+      const key = groupBy === 'family' ? (localPhone(parentPhone(s)) || 'none') : (s.class_id || 'none');
+      if (!m.has(key)) m.set(key, []);
+      m.get(key).push(s);
+    }
+    return [...m.entries()].map(([key, kids]) => {
+      kids.sort(groupBy === 'family' ? byAge : (a, b) => a.full_name.localeCompare(b.full_name));
+      const title = key === 'none' ? (groupBy === 'family' ? 'No parent mobile registered' : 'No class yet')
+        : groupBy === 'family' ? `📱 ${key}${kids[0].guardian_name ? ' · ' + kids[0].guardian_name : ''}` : classTag(cls(key));
+      const sub = groupBy === 'family' && key !== 'none' ? `${kids.length} ${kids.length === 1 ? 'child' : 'children'}` : `${kids.length} ${kids.length === 1 ? 'student' : 'students'}`;
+      return { key, kids, title, sub };
+    }).sort((a, b) => (a.key === 'none') - (b.key === 'none') || b.kids.length - a.kids.length || a.title.localeCompare(b.title));
+  }, [list, groupBy]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const picked = groups.flatMap((g) => g.kids).filter((s) => !off.has(s.id));
+  const setMany = (kids, on) => { const n = new Set(off); kids.forEach((s) => (on ? n.delete(s.id) : n.add(s.id))); setOff(n); };
+  const families = groups.filter((g) => groupBy === 'family' && g.key !== 'none' && g.kids.length > 1).length;
 
   async function run() {
     const out = [];
-    for (const [k, s] of picked.entries()) {
-      setBusy(`${k + 1} of ${picked.length}`);
+    // eldest first in each family, so the eldest gets the plain mobile number and the next -2, -3 …
+    const order = groups.flatMap((g) => g.kids).filter((s) => !off.has(s.id));
+    for (const [k, s] of order.entries()) {
+      setBusy(`${k + 1} of ${order.length}`);
       const mobile = localPhone(parentPhone(s));
       const password = pwMode === 'phone' && mobile.length >= 6 ? mobile : makePassword();
       const args = { p_email: s.email || '', p_password: password, p_full_name: s.full_name, p_phone: parentPhone(s) || null, p_role: 'student', p_student_id: s.id };
@@ -606,29 +631,44 @@ function BulkStudentLogins({ students, classes, onClose }) {
       if (error && /already exists/i.test(error.message) && args.p_email) ({ data, error } = await supabase.rpc('admin_create_user', { ...args, p_email: '' }));
       let username = '', note = '';
       if (!error && signIn === 'phone' && mobile && data?.id) {
-        // brothers and sisters share the parent's number: the 2nd gets 0551234567-2, the 3rd -3 …
         for (let n = 1; n <= 9 && !username; n++) {
           const u = n === 1 ? mobile : `${mobile}-${n}`;
-          const { error: e2 } = await supabase.from('profiles').update({ username: u }).eq('id', data.id);
-          if (!e2) username = u;
+          const { data: d2, error: e2 } = await supabase.from('profiles').update({ username: u }).eq('id', data.id).select('id');
+          if (!e2 && d2?.length) username = u;
+          else if (!e2) { note = 'username not saved — sign in with the Student ID'; break; }
           else if (!/unique|duplicate|already/i.test(e2.message)) { note = e2.message; break; }
         }
       } else if (!error && signIn === 'phone' && !mobile) note = 'no parent mobile number — sign in with the Student ID';
-      out.push({ s, password, username, note, error: error?.message || '' });
+      out.push({ s, password, username, note, error: error?.message || '', fam: localPhone(parentPhone(s)) });
     }
     setBusy(''); setDone(out);
   }
   const ok = (done || []).filter((r) => !r.error);
-  const rows = () => ok.map(({ s, password, username }) => ({ 'Sign in with': username || s.student_code, 'Student ID': s.student_code, Name: s.full_name, Class: s.class_id ? classTag(cls(s.class_id)) : '', Password: password, 'Parent mobile': parentPhone(s) }));
-  const msg = (s, password, username) => loginMessage({ full_name: s.full_name, email: '', password, role: 'student', student_code: s.student_code, username, phone: parentPhone(s) });
+  const rows = () => ok.map(({ s, password, username }) => ({ 'Parent mobile': parentPhone(s), Parent: s.guardian_name || '', Name: s.full_name, 'Student ID': s.student_code, Class: s.class_id ? classTag(cls(s.class_id)) : '', 'Sign in with': username || s.student_code, Password: password }));
+  // one WhatsApp per family with every child's login
+  const famDone = useMemo(() => {
+    const m = new Map();
+    for (const r of ok) { const k = r.fam || 'id:' + r.s.id; if (!m.has(k)) m.set(k, []); m.get(k).push(r); }
+    return [...m.values()];
+  }, [done]); // eslint-disable-line react-hooks/exhaustive-deps
+  const famMsg = (list2) => {
+    const st = getSettings();
+    return `Assalamu Alaikum ${list2[0].s.guardian_name || 'Parent'},\n\nStudent logins for ${st.school_name}:\n` +
+      list2.map((r) => `• ${r.s.full_name} (${r.s.student_code}) — sign in: ${r.username || r.s.student_code} · password: ${r.password}`).join('\n') +
+      `\n\nWebsite: ${window.location.origin}\nPlease change the password after the first sign-in (Account).\n\nJazakAllahu khairan.`;
+  };
   const stamp = new Date().toISOString().slice(0, 10);
 
   return (
     <Modal title={done ? `Student logins created (${ok.length})` : 'Create student logins'} onClose={busy ? () => {} : onClose}>
       {!done ? (
         <>
-          <p className="small muted">Choose how students sign in. They can always also use their <b>Student ID</b> (for example QC1001). You'll see every login at the end to send on WhatsApp or print.</p>
+          <p className="small muted">Students without a login, grouped by their <b>registered parent mobile number</b> — brothers and sisters appear together. Tick a whole family, or single students.</p>
           <div className="filters">
+            <select value={groupBy} onChange={(e) => setGroupBy(e.target.value)} aria-label="Group by">
+              <option value="family">Group by parent mobile (families)</option>
+              <option value="class">Group by class</option>
+            </select>
             <select value={signIn} onChange={(e) => setSignIn(e.target.value)} aria-label="Sign in with">
               <option value="phone">Sign in with the parent's mobile number</option>
               <option value="id">Sign in with the Student ID only</option>
@@ -637,28 +677,42 @@ function BulkStudentLogins({ students, classes, onClose }) {
               <option value="random">Password: a new password for each student</option>
               <option value="phone">Password: the parent's mobile number</option>
             </select>
-            <select value={classId} onChange={(e) => setClassId(e.target.value)} aria-label="Class">
-              <option value="all">All classes</option>
-              {classes.map((c) => <option key={c.id} value={c.id}>{classTag(c)}</option>)}
-              <option value="none">No class yet</option>
-            </select>
+            <input type="search" placeholder="Search name, ID or mobile…" value={q} onChange={(e) => setQ(e.target.value)} />
           </div>
-          <div className="pick-list">
-            <div className="pick-head"><label><input type="checkbox" checked={picked.length === shown.length && shown.length > 0}
-              onChange={(e) => { const n = new Set(off); shown.forEach((s) => (e.target.checked ? n.delete(s.id) : n.add(s.id))); setOff(n); }} />
-              <b>{picked.length} of {shown.length} selected</b></label></div>
-            <div className="pick-body">
-              {shown.map((s) => (
-                <label key={s.id} className="pick-row">
-                  <input type="checkbox" checked={!off.has(s.id)} onChange={(e) => { const n = new Set(off); if (e.target.checked) n.delete(s.id); else n.add(s.id); setOff(n); }} />
-                  <span className="pick-name"><b>{s.full_name}</b> <span className="muted">{s.student_code}</span></span>
-                  <span className="pick-meta small muted">{s.class_id ? classTag(cls(s.class_id)) : 'No class'}{s.status === 'pending' ? ' · pending admission' : ''} · {localPhone(parentPhone(s)) || <b className="low">no parent mobile</b>}</span>
-                </label>
-              ))}
-              {!shown.length && <p className="muted small" style={{ padding: 12 }}>Every student here already has a login.</p>}
-            </div>
+          <div className="pick-head lg-head">
+            <label><input type="checkbox" checked={picked.length === list.length && list.length > 0} onChange={(e) => setMany(list, e.target.checked)} />
+              <b>{picked.length} of {list.length} selected</b>{groupBy === 'family' && families > 0 ? <span className="muted small"> · {families} {families === 1 ? 'family' : 'families'} with brothers / sisters</span> : null}</label>
           </div>
-          {signIn === 'phone' && <p className="small muted">Brothers and sisters share the parent's number: the second child signs in with <b>0551234567-2</b>, the third with <b>-3</b>. A parent who also has a parent login should sign in with their Parent ID (PR…).</p>}
+          <div className="lg-list">
+            {groups.map((g) => {
+              const sel = g.kids.filter((s) => !off.has(s.id)).length;
+              const open = openG.has(g.key) || g.kids.length > 1 || groups.length <= 12 || !!q;
+              return (
+                <div key={g.key} className={`lg-group ${g.key === 'none' ? 'none' : ''}`}>
+                  <div className="lg-gh">
+                    <input type="checkbox" checked={sel === g.kids.length} ref={(el) => { if (el) el.indeterminate = sel > 0 && sel < g.kids.length; }} onChange={(e) => setMany(g.kids, e.target.checked)} aria-label={`Select ${g.title}`} />
+                    <button type="button" className="lg-title" onClick={() => { const n = new Set(openG); if (n.has(g.key)) n.delete(g.key); else n.add(g.key); setOpenG(n); }}>
+                      <b>{g.title}</b> <span>{g.sub}</span>
+                    </button>
+                    <span className="lg-cnt">{sel} of {g.kids.length} selected</span>
+                  </div>
+                  {open && g.kids.map((s, i) => (
+                    <label key={s.id} className={`lg-row ${signIn === 'phone' && !localPhone(parentPhone(s)) ? 'off' : ''}`}>
+                      <input type="checkbox" checked={!off.has(s.id)} onChange={(e) => setMany([s], e.target.checked)} />
+                      <span className="pick-name"><b>{s.full_name}</b> <span className="muted">{s.student_code}</span></span>
+                      <span className="pick-meta small muted">
+                        {groupBy === 'family' ? (s.class_id ? classTag(cls(s.class_id)) : 'No class') : (localPhone(parentPhone(s)) || 'no parent mobile')}
+                        {s.status === 'pending' ? ' · pending admission' : ''}
+                        {signIn === 'phone' && groupBy === 'family' && g.key !== 'none' && <> · sign in <b>{i === 0 ? g.key : `${g.key}-${i + 1}`}</b></>}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+              );
+            })}
+            {!list.length && <p className="muted small" style={{ padding: 12 }}>Every student here already has a login.</p>}
+          </div>
+          {signIn === 'phone' && <p className="small muted">The eldest child signs in with the parent's number (e.g. <b>0551234567</b>), the next with <b>0551234567-2</b>, then <b>-3</b>. Every child can also use their Student ID.</p>}
           <div className="actions">
             <button className="btn" onClick={run} disabled={!picked.length || !!busy}>{busy ? `Creating ${busy}…` : `Create ${picked.length} login${picked.length === 1 ? '' : 's'}`}</button>
             <button className="btn ghost" onClick={onClose} disabled={!!busy}>Cancel</button>
@@ -666,26 +720,30 @@ function BulkStudentLogins({ students, classes, onClose }) {
         </>
       ) : (
         <>
-          <p className="small muted">Send each student their details now — the passwords are not shown again. They sign in with the Student ID and can change the password under "Account".</p>
+          <p className="small muted">Send each family their children's logins now — the passwords are not shown again. One WhatsApp message per parent mobile includes every child.</p>
           <div className="actions">
-            <button className="btn" disabled={!ok.length} onClick={() => downloadPdf(`student-logins-${stamp}.pdf`, { title: 'Student logins', subtitle: `Website: ${window.location.origin}   ·   Sign in with the Student ID and password`, orientation: 'portrait', tables: [{ heading: `${ok.length} students`, columns: Object.keys(rows()[0] || {}), rows: rows().map((r) => Object.values(r)) }] })}>Download PDF</button>
-            <button className="btn ghost" disabled={!ok.length} onClick={() => downloadExcel(`student-logins-${stamp}.xlsx`, [{ name: 'Student logins', rows: rows() }])}>Excel</button>
+            <button className="btn" disabled={!ok.length} onClick={() => downloadPdf(`student-logins-${stamp}.pdf`, { title: 'Student logins', subtitle: `Website: ${window.location.origin}   ·   Grouped by parent mobile`, orientation: 'portrait', tables: [{ heading: `${ok.length} students`, columns: Object.keys(rows()[0] || {}), rows: rows().map((r) => Object.values(r)), compact: true }] })}>Download PDF</button>
+            <button className="btn ghost" disabled={!ok.length} onClick={() => downloadExcel(`student-logins-${stamp}.xlsx`, [{ name: 'Student logins', rows: rows() }], { title: 'Student logins', subtitle: 'Grouped by parent mobile' })}>Excel</button>
           </div>
-          <div className="pick-list">
-            <div className="pick-body">
-              {done.map(({ s, password, username, note, error }) => (
-                <div key={s.id} className="pick-row">
-                  <span className="pick-name"><b>{s.full_name}</b> <span className="muted">{s.student_code}</span></span>
-                  {error ? <span className="pick-meta small low">Not created: {error}</span> : (
-                    <span className="pick-meta small">Sign in: <b>{username || s.student_code}</b> · Password: <code>{password}</code>{note ? <span className="muted"> ({note})</span> : null}{' '}
-                      {whatsappLink(s.whatsapp || s.guardian_phone, 'x')
-                        ? <a className="btn whatsapp small" target="_blank" rel="noreferrer" href={whatsappLink(s.whatsapp || s.guardian_phone, msg(s, password, username))}>WhatsApp</a>
-                        : <span className="muted">no phone</span>}
-                    </span>
-                  )}
+          <div className="lg-list">
+            {famDone.map((fl) => {
+              const phone = parentPhone(fl[0].s);
+              return (
+                <div key={fl[0].s.id} className="lg-group">
+                  <div className="lg-gh">
+                    <span className="lg-title"><b>{fl[0].fam ? `📱 ${fl[0].fam}` : fl[0].s.full_name}</b> <span>{fl[0].s.guardian_name || ''}{fl.length > 1 ? ` · ${fl.length} children` : ''}</span></span>
+                    {whatsappLink(phone, 'x') ? <a className="btn whatsapp small" target="_blank" rel="noreferrer" href={whatsappLink(phone, famMsg(fl))}>WhatsApp{fl.length > 1 ? ` (${fl.length})` : ''}</a> : <span className="muted small">no phone</span>}
+                  </div>
+                  {fl.map((r) => (
+                    <div key={r.s.id} className="lg-row">
+                      <span className="pick-name"><b>{r.s.full_name}</b> <span className="muted">{r.s.student_code}</span></span>
+                      <span className="pick-meta small">Sign in: <b>{r.username || r.s.student_code}</b> · Password: <code>{r.password}</code>{r.note ? <span className="muted"> ({r.note})</span> : null}</span>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
+              );
+            })}
+            {(done || []).filter((r) => r.error).map((r) => <div key={r.s.id} className="lg-row"><b>{r.s.full_name}</b> <span className="small low">Not created: {r.error}</span></div>)}
           </div>
           <div className="actions"><button className="btn ghost" onClick={onClose}>Close</button></div>
         </>
