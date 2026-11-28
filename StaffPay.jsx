@@ -1,3 +1,4 @@
+import { needsSql } from './finance.js';
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery } from './data.js';
@@ -40,7 +41,7 @@ export default function StaffPay() {
   const slips = useQuery(() => supabase.from('payslips').select('*').eq('month', month).order('created_at'), [month]);
   const methods = useQuery(fetchMethods);
   const err0 = staff.error || pay.error || slips.error;
-  if (err0) return <section className="card"><h2>Staff payments</h2><p className="error">{isMissing(err0) ? NEEDS_SQL : err0}</p></section>;
+  if (err0) return <section className="card"><h2>Staff payments</h2><p className="error">{isMissing(err0) ? needsSql(err0) : err0}</p></section>;
   return (
     <>
       <section className="card">
@@ -106,7 +107,7 @@ function Slips({ month, setMonth, staff, pay, slips, methods }) {
   async function prepare() {
     setErr(''); setMsg(''); setBusy(true);
     const { data: taught, error: e1 } = await supabase.rpc('fin_classes_taught', { p_month: month });
-    if (e1) { setBusy(false); setErr(isMissing(e1) ? NEEDS_SQL : e1.message); return; }
+    if (e1) { setBusy(false); setErr(isMissing(e1) ? needsSql(e1) : e1.message); return; }
     const days = Object.fromEntries((taught || []).map((t) => [t.profile_id, t.days]));
     const rows = missing.map((x) => {
       const classes = x.pay_type === 'per_class' ? days[x.profile_id] || 0 : 0;

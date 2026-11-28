@@ -1,3 +1,4 @@
+import { needsSql } from './finance.js';
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchAllRows } from './data.js';
@@ -55,7 +56,7 @@ export default function FinReports() {
 
 const useEntries = (from, to) => useQuery(() => fetchAllRows(() => supabase.from('fin_entries').select('*, fin_categories(name), students(full_name, student_code)').eq('status', 'active').gte('entry_date', from).lte('entry_date', to).order('entry_date').order('entry_no'))
   .then((d) => ({ data: d, error: null }), (e) => ({ data: null, error: e })), [from, to]);
-const Err = ({ e }) => <section className="card"><p className="error">{isMissing(e) ? NEEDS_SQL : String(e?.message || e)}</p></section>;
+const Err = ({ e }) => <section className="card"><p className="error">{isMissing(e) ? needsSql(e) : String(e?.message || e)}</p></section>;
 
 function IncomeStatement({ from, to, period }) {
   const q = useEntries(from, to);

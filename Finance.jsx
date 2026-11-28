@@ -1,3 +1,4 @@
+import { needsSql } from './finance.js';
 import { useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchAllRows } from './data.js';
@@ -50,7 +51,7 @@ export default function Finance({ profile }) {
   };
 
   if (entries.error || cats.error) {
-    return <section className="card"><h2>Income & expenses</h2><p className="error">{isMissing(entries.error || cats.error) ? NEEDS_SQL : (entries.error || cats.error)}</p></section>;
+    return <section className="card"><h2>Income & expenses</h2><p className="error">{isMissing(entries.error || cats.error) ? needsSql(entries.error || cats.error) : (entries.error || cats.error)}</p></section>;
   }
 
   const pct = (a, b) => (b ? Math.round(((a - b) / b) * 100) : null);
@@ -245,7 +246,7 @@ export function EntryForm({ kind, cats, methods, isClosed, preset = {}, onClose,
       if (e2) { setBusy(false); setErr(`Saved as ${data.entry_no}, but the attachment failed: ${e2.message}`); return; }
     }
     setBusy(false);
-    if (error) setErr(isMissing(error) ? NEEDS_SQL : error.message); else onSaved(data);
+    if (error) setErr(isMissing(error) ? needsSql(error) : error.message); else onSaved(data);
   }
   return (
     <Modal title={kind === 'income' ? 'Add income' : 'Add expense'} onClose={onClose}>

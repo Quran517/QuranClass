@@ -38,6 +38,8 @@ export const fetchCategories = () => supabase.from('fin_categories').select('*')
 export const fetchMethods = () => supabase.from('fin_methods').select('*').order('sort').order('name');
 export const isMissing = (err) => /fin_|fee_|payslip|staff_pay|schema cache|does not exist/i.test(String(err?.message || err || ''));
 export const NEEDS_SQL = 'Finance needs a database update — run update-28.sql in Supabase → SQL Editor, then refresh this page.';
+// the same message, with the database's own words so the cause can be found
+export const needsSql = (e) => `${NEEDS_SQL} (Details: ${String(e?.message || e || '').slice(0, 220)})`;
 
 // ---------- statement: fees charged vs paid, oldest first ----------
 // charges: fee_charges rows; payments: income fin_entries for the student (active only)

@@ -1,3 +1,4 @@
+import { needsSql } from './finance.js';
 import { useMemo, useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchAllRows, fetchGroups } from './data.js';
@@ -45,7 +46,7 @@ export default function Fees({ profile }) {
   const methods = useQuery(fetchMethods);
   const plans = useQuery(() => supabase.from('fee_plans').select('*').order('created_at'));
   const groups = useQuery(fetchGroups);
-  if (data.error || plans.error) return <section className="card"><h2>Fees & collection</h2><p className="error">{isMissing(data.error || plans.error) ? NEEDS_SQL : String(data.error?.message || data.error || plans.error)}</p></section>;
+  if (data.error || plans.error) return <section className="card"><h2>Fees & collection</h2><p className="error">{isMissing(data.error || plans.error) ? needsSql(data.error || plans.error) : String(data.error?.message || data.error || plans.error)}</p></section>;
   return (
     <>
       <section className="card">
@@ -181,7 +182,7 @@ function PaymentForm({ student, family, methods, onClose, onSaved }) {
       details: f.details.trim() || `Fees — ${p.periods.join(', ')}`, student_id: p.k.id,
     }))).select('id, entry_no, entry_date, amount, method, party, reference, details, student_id');
     setBusy(false);
-    if (error) { setErr(isMissing(error) ? NEEDS_SQL : error.message); return; }
+    if (error) { setErr(isMissing(error) ? needsSql(error) : error.message); return; }
     const list = data.map((d) => ({ ...d, student_label: `${kids.find((k) => k.id === d.student_id)?.full_name} (${kids.find((k) => k.id === d.student_id)?.student_code})` }));
     setDone({ list, balanceAfter: round2(due - amt) });
     onSaved();
@@ -260,7 +261,7 @@ function CreateFees({ plans, data, reload, groups }) {
     setBusy(true);
     const { data: r, error } = await supabase.rpc('fin_generate_charges', { p_plan: plan.id, p_period_start: pStart, p_label: pLabel.trim(), p_due: due || null });
     setBusy(false);
-    if (error) setErr(isMissing(error) ? NEEDS_SQL : error.message);
+    if (error) setErr(isMissing(error) ? needsSql(error) : error.message);
     else { setMsg(`${r.created} fee${r.created === 1 ? '' : 's'} created for ${pLabel}. ${r.students - r.created > 0 ? `${r.students - r.created} skipped (already created, or free place).` : ''}`); reload(); }
   }
   // batches already created
@@ -327,7 +328,7 @@ function Plans({ plans, classes, groups }) {
     const v = { name: edit.name.trim(), amount: round2(edit.amount), frequency: edit.frequency, group_id: edit.group_id || null, class_id: edit.class_id || null, sibling_discount: !!edit.sibling_discount, active: edit.active !== false };
     if (!v.name) { setErr('Please give the plan a name.'); return; }
     const { error } = edit.id ? await supabase.from('fee_plans').update(v).eq('id', edit.id) : await supabase.from('fee_plans').insert(v);
-    if (error) setErr(isMissing(error) ? NEEDS_SQL : error.message); else { setEdit(null); plans.reload(); }
+    if (error) setErr(isMissing(error) ? needsSql(error) : error.message); else { setEdit(null); plans.reload(); }
   }
   return (
     <section className="card">
@@ -380,7 +381,7 @@ function Discounts({ rows }) {
   async function saveSib() {
     setErr(''); setMsg('');
     const { error } = await supabase.rpc('fin_set_settings', { p_sibling2: Number(s2) || 0, p_sibling3: Number(s3) || 0, p_currency: null, p_year_start: null });
-    if (error) setErr(isMissing(error) ? NEEDS_SQL : error.message); else { setMsg('Saved. New fees will use these discounts.'); loadSettings(); }
+    if (error) setErr(isMissing(error) ? needsSql(error) : error.message); else { setMsg('Saved. New fees will use these discounts.'); loadSettings(); }
   }
   async function saveOwn(e) {
     e.preventDefault();

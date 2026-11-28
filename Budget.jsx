@@ -1,3 +1,4 @@
+import { needsSql } from './finance.js';
 import { useState } from 'react';
 import { supabase } from './supabase.js';
 import { useQuery, fetchAllRows } from './data.js';
@@ -26,7 +27,7 @@ export default function Budget() {
   const [edits, setEdits] = useState({});
   const [msg, setMsg] = useState('');
   const [err, setErr] = useState('');
-  if (q.error) return <section className="card"><h2>Budget</h2><p className="error">{isMissing(q.error) ? NEEDS_SQL : String(q.error.message || q.error)}</p></section>;
+  if (q.error) return <section className="card"><h2>Budget</h2><p className="error">{isMissing(q.error) ? needsSql(q.error) : String(q.error.message || q.error)}</p></section>;
   const rows = q.data?.rows || [];
   const fy = q.data?.fy || finYear(year);
   const val = (r) => (edits[r.id] !== undefined ? edits[r.id] : r.budget);
