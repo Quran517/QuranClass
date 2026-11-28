@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import FeeStatement from './FeeStatement.jsx';
 import StudentForm from './StudentForm.jsx';
 import StudentQR from './StudentQR.jsx';
 import { PrintCards, studentToCard, printCards, DigitalCard } from './IdCards.jsx';
@@ -165,7 +166,14 @@ export default function StudentHome({ profile, go = () => {} }) {
                 </tbody>
               </table>
             </div>
-          )}
+                    )}
+        </section>
+      )}
+
+      {student.status === 'approved' && (
+        <section className="card">
+          <h2>My fees</h2>
+          <FeeStatement students={[student]} compact />
         </section>
       )}
     </div>

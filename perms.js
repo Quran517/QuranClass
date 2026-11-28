@@ -17,6 +17,7 @@ export const AREAS = [
   ['messages', 'Messages', 'Send email / WhatsApp messages to parents'],
   ['activity', 'Activity', 'See the activity log'],
   ['settings', 'Settings', 'Change settings, download and restore backups'],
+  ['finance', 'Finance', 'Income & expenses, fees & collection, staff payments, budget and finance reports'],
 ];
 
 // Ready-made access for an "Admin assistant": everything except Users and Settings.
@@ -25,12 +26,15 @@ export const PRINCIPAL_PERMS = ['dashboard', 'students', 'attendance', 'progress
 
 export const ASSISTANT_PERMS = ['dashboard', 'admissions', 'students', 'classes', 'attendance', 'progress', 'exams', 'staffatt', 'reports', 'idcards', 'messages', 'team', 'activity'];
 
+export const ACCOUNTANT_PERMS = ['finance'];
+export const FINANCE_TABS = [['finance', 'Income & expenses'], ['fees', 'Fees & collection'], ['staffpay', 'Staff payments'], ['budget', 'Budget'], ['finreports', 'Finance reports']];
+
 export const isAdmin = (profile) => profile?.role === 'admin';
 
 export function roleLabel(p) {
   if (!p) return '';
   if (p.role === 'admin') return 'Admin';
-  if (p.role === 'teacher') return p.staff_title === 'assistant' ? 'Admin assistant' : p.staff_title === 'principal' ? 'Principal' : 'Teacher';
+  if (p.role === 'teacher') return p.staff_title === 'assistant' ? 'Admin assistant' : p.staff_title === 'principal' ? 'Principal' : p.staff_title === 'accountant' ? 'Treasurer / accountant' : 'Teacher';
   if (p.role === 'parent') return 'Parent';
   return 'Student';
 }

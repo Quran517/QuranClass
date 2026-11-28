@@ -23,7 +23,12 @@ import Exams from './Exams.jsx';
 import Certificates from './Certificates.jsx';
 import { ParentHome, StudentResultsPage } from './Family.jsx';
 import { loadSettings } from './settings.js';
-import { AREAS } from './perms.js';
+import { AREAS, FINANCE_TABS } from './perms.js';
+import Finance from './Finance.jsx';
+import Fees from './Fees.jsx';
+import StaffPay from './StaffPay.jsx';
+import Budget from './Budget.jsx';
+import FinReports from './FinReports.jsx';
 
 const TABS = {
   student: [
@@ -66,6 +71,7 @@ const TABS = {
     ['team', 'QTC Team'],
     ['activity', 'Activity'],
     ['settings', 'Settings'],
+    ...FINANCE_TABS,
     ['account', 'Account'],
   ],
 };
@@ -163,6 +169,13 @@ export default function App() {
     ];
     if (granted.has('dashboard')) tabs = [tabs.find(([k]) => k === 'dashboard'), ...tabs.filter(([k]) => k !== 'dashboard')];
   }
+  if (profile.role === 'teacher' && (profile.permissions || []).includes('finance')) {
+    // Finance access: the finance pages; a Treasurer / accountant sees only finance (no class pages)
+    const others = profile.staff_title === 'accountant'
+      ? tabs.filter(([k]) => ['team', 'account'].includes(k) || (k !== 'myclasses' && !TABS.teacher.some(([t]) => t === k)))
+      : tabs;
+    tabs = [...FINANCE_TABS, ...others.filter(([k]) => !FINANCE_TABS.some(([f]) => f === k) && k !== 'finance')];
+  }
   const current = tabs.some(([k]) => k === tab) ? tab : tabs[0][0];
 
   const pages = {
@@ -187,6 +200,11 @@ export default function App() {
     certificates: <Certificates profile={profile} />,
     children: <ParentHome profile={profile} />,
     results: <StudentResultsPage profile={profile} />,
+    finance: <Finance profile={profile} />,
+    fees: <Fees profile={profile} />,
+    staffpay: <StaffPay profile={profile} />,
+    budget: <Budget profile={profile} />,
+    finreports: <FinReports profile={profile} />,
   };
 
   return (

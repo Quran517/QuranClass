@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import { MyPayslips } from './StaffPay.jsx';
 import { realEmail, cleanUsername, USERNAME_RULE, usernameError } from './util.js';
 
 export default function Account({ profile, onSaved }) {
@@ -62,6 +63,7 @@ export default function Account({ profile, onSaved }) {
         </form>
       </section>
       {profile.role === 'student' && <MyStudentDetails profile={profile} />}
+      {(profile.role === 'teacher' || profile.role === 'admin') && <MyPayslips profile={profile} />}
       <section className="card">
         <h2>Username</h2>
         <p className="small muted">Choose a name to sign in with — for example your phone number (0551234567) or a short name (ahmed.k). Letters, numbers and . _ + - only.</p>

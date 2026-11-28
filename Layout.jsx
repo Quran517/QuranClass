@@ -10,12 +10,14 @@ const ICON = {
   admissions: '📥', students: '🎓', classes: '🏫', users: '👥',
   attendance: '📷', staffatt: '🧑‍🏫', progress: '📖', exams: '📝', certificates: '🏅', reports: '📊', idcards: '🪪',
   messages: '💬', team: '🤝', activity: '🕘', settings: '⚙️', account: '👤',
+  finance: '💰', fees: '🧾', staffpay: '👛', budget: '📈', finreports: '📑',
 };
 const SECTIONS = [
   ['Overview', ['dashboard', 'myclasses', 'home', 'children', 'results']],
   ['Students', ['admissions', 'students', 'classes']],
   ['Teaching', ['attendance', 'progress', 'exams', 'certificates', 'reports', 'idcards']],
   ['People', ['users', 'staffatt', 'team', 'messages']],
+  ['Finance', ['finance', 'fees', 'staffpay', 'budget', 'finreports']],
   ['System', ['activity', 'settings', 'account']],
 ];
 const SUBTITLE = {
@@ -27,6 +29,8 @@ const SUBTITLE = {
   reports: 'Attendance reports and downloads', idcards: 'Print student and staff ID cards', messages: 'WhatsApp and email to parents',
   team: 'QTC team members and responsibilities', activity: 'Everything that changed, and who changed it', settings: 'School details, logo, class days and backups',
   account: 'Your name, phone, username and password',
+  finance: 'Money in and money out', fees: 'Fees, payments, receipts and who still owes', staffpay: 'Payslips and staff payments',
+  budget: 'Plan the year and compare with actual', finreports: 'Statements, cash book, receivables and more',
 };
 
 const initials = (n) => (n || '?').split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]).join('').toUpperCase();

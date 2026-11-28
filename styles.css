@@ -903,3 +903,66 @@ tbody tr:hover td { background: #f8fafe; }
 .miss-range { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .miss-range .span3 { grid-column: 1 / -1; margin: 0; }
 @media (max-width: 640px) { .miss-range { grid-template-columns: 1fr; } }
+
+/* ================= Finance ================= */
+.btn.maroon { background: #742224; }
+.btn.maroon:hover { background: #5e1a1c; }
+.seg-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin: 12px 0 4px; }
+.seg-tabs button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 7px 14px; font: inherit; font-size: .88rem; cursor: pointer; color: var(--text); }
+.seg-tabs button.on { background: var(--navy, #1c2f55); border-color: var(--navy, #1c2f55); color: #fff; font-weight: 600; }
+.up { color: #136c3c; } .dn { color: #b42318; }
+.fpill { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .74rem; font-weight: 700; background: #eef0f4; color: #4a5266; white-space: nowrap; }
+.fpill.ok { background: #e6f6ed; color: #136c3c; } .fpill.part { background: #fff4dc; color: #8a5a00; }
+.fpill.no { background: #fde8e8; color: #b42318; } .fpill.exp { background: #f6e5e5; color: #742224; }
+.fin-kpis { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.fin-kpi { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; border-top: 4px solid var(--navy, #1c2f55); }
+.fin-kpi small { display: block; color: var(--muted); font-size: .8rem; }
+.fin-kpi b { display: block; font-size: 1.45rem; margin: 4px 0 2px; }
+.fin-kpi i { font-style: normal; font-size: .8rem; }
+.fin-kpi.inc { border-top-color: #23502f; } .fin-kpi.exp { border-top-color: #742224; } .fin-kpi.due { border-top-color: #e07414; }
+.fin-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 14px; }
+.fin-grid > .card { margin: 0 0 14px; }
+.fin-chart { display: flex; align-items: flex-end; gap: 6px; height: 190px; border-bottom: 1px solid var(--line); padding: 0 4px; }
+.fin-month { flex: 1; height: 100%; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; background: none; border: 0; cursor: pointer; padding: 0; border-radius: 8px; }
+.fin-month.on { background: #f4efe4; }
+.fin-month .bars { flex: 1; width: 100%; display: flex; align-items: flex-end; justify-content: center; gap: 3px; }
+.fin-month .bars i { width: 34%; max-width: 16px; min-height: 2px; border-radius: 4px 4px 0 0; }
+.fin-month .bars .a { background: #23502f; } .fin-month .bars .b { background: #742224; }
+.fin-month em { font-style: normal; font-size: .72rem; color: var(--muted); padding: 4px 0; }
+.fin-legend { display: flex; gap: 16px; align-items: center; font-size: .82rem; margin-top: 10px; }
+.fin-legend .a::before, .fin-legend .b::before { content: ''; display: inline-block; width: 10px; height: 10px; border-radius: 3px; margin-right: 5px; vertical-align: -1px; }
+.fin-legend .a::before { background: #23502f; } .fin-legend .b::before { background: #742224; }
+.cat-bars div { display: flex; align-items: center; gap: 10px; font-size: .88rem; margin: 7px 0; }
+.cat-bars em { flex: 1.2; font-style: normal; } .cat-bars b { min-width: 64px; text-align: right; }
+.cat-bars .tr { flex: 1.3; height: 8px; background: #f1ebdf; border-radius: 8px; overflow: hidden; }
+.cat-bars .tr span { display: block; height: 100%; border-radius: 8px; }
+.fin-table td.num, .fin-table th.num, .table td.num, .table th.num { text-align: right; white-space: nowrap; }
+.fin-table tr.clickable { cursor: pointer; } .fin-table tr.clickable:hover td { background: #f8f3e8; }
+tr.cancelled td { color: #9aa0ad; text-decoration: line-through; } tr.cancelled td .fpill { text-decoration: none; }
+tr.fam-first td { border-top: 2px solid #e0d6c2; }
+.total-row td { border-top: 2px solid var(--line); background: #fbf8f2; }
+.small-table td, .small-table th { padding: 6px 8px; font-size: .86rem; }
+.stmt-block { margin-bottom: 14px; }
+.stmt-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 8px 0 10px; }
+.stmt-sum div { background: #fbf8f2; border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+.stmt-sum small { display: block; color: var(--muted); font-size: .76rem; } .stmt-sum b { font-size: 1.1rem; }
+.report-pick { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; margin: 12px 0; }
+.report-tile { text-align: left; background: #fff; border: 1.5px solid var(--line); border-radius: 12px; padding: 12px 14px; cursor: pointer; font: inherit; color: var(--text); }
+.report-tile b { display: block; margin-bottom: 3px; } .report-tile span { font-size: .8rem; color: var(--muted); }
+.report-tile.on { border-color: var(--navy, #1c2f55); background: #f4efe4; box-shadow: inset 4px 0 0 #e07414; }
+.budget-bar { position: relative; height: 18px; background: #f1ebdf; border-radius: 9px; overflow: hidden; }
+.budget-bar span { display: block; height: 100%; background: #23502f; border-radius: 9px; }
+.budget-bar span.warn { background: #e07414; } .budget-bar span.over { background: #b42318; }
+.budget-bar em { position: absolute; right: 8px; top: 0; font-style: normal; font-size: .72rem; line-height: 18px; font-weight: 700; color: #1c2740; }
+.result-line { font-size: 1.1rem; text-align: right; margin-top: 10px; }
+.cancel-box { margin-top: 16px; padding: 12px; border: 1px dashed #e5b7b7; border-radius: 10px; background: #fff8f8; display: grid; gap: 8px; }
+.cancel-box h3 { margin: 0; }
+.setup-row { display: flex; margin: 4px 0; }
+.details { display: grid; grid-template-columns: max-content 1fr; gap: 6px 14px; margin: 0 0 12px; }
+.details dt { color: var(--muted); } .details dd { margin: 0; }
+@media (max-width: 900px) {
+  .fin-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fin-grid, .report-pick { grid-template-columns: 1fr; }
+}
+@media (max-width: 520px) { .stmt-sum { grid-template-columns: 1fr; } .fin-kpi b { font-size: 1.2rem; } }
+.fin-table td.acts { min-width: 210px; } .fin-table td.acts > * { margin: 2px 0; }

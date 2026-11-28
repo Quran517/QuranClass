@@ -5,7 +5,7 @@ import { formatDate, whatsappLink, realEmail, cleanUsername, USERNAME_RULE, user
 import { downloadExcel, downloadPdf } from './exports.js';
 import Modal from './Modal.jsx';
 import { getSettings } from './settings.js';
-import { AREAS, ASSISTANT_PERMS, PRINCIPAL_PERMS, roleLabel } from './perms.js';
+import { AREAS, ASSISTANT_PERMS, PRINCIPAL_PERMS, roleLabel, ACCOUNTANT_PERMS } from './perms.js';
 
 // 0551234567 style: digits only, Saudi numbers start with 0
 function localPhone(p) {
@@ -77,12 +77,13 @@ export default function Users({ me }) {
   async function changeRole(p, choice) {
     setErr(''); setSaved('');
     if (p.id === me.id && choice !== 'admin' && !window.confirm('You are removing your own admin access. Continue?')) return;
-    const newRole = choice === 'assistant' || choice === 'principal' ? 'teacher' : choice;
+    const newRole = ['assistant', 'principal', 'accountant'].includes(choice) ? 'teacher' : choice;
     const update = { role: newRole };
     if (meAdmin && newRole === 'teacher') {
-      update.staff_title = choice === 'assistant' || choice === 'principal' ? choice : null;
+      update.staff_title = ['assistant', 'principal', 'accountant'].includes(choice) ? choice : null;
       if (choice === 'assistant') update.permissions = ASSISTANT_PERMS;
       else if (choice === 'principal') update.permissions = PRINCIPAL_PERMS;
+      else if (choice === 'accountant') update.permissions = ACCOUNTANT_PERMS;
       else if (p.staff_title) update.permissions = [];
     }
     let { error } = await supabase.from('profiles').update(update).eq('id', p.id);
@@ -91,7 +92,7 @@ export default function Users({ me }) {
       return;
     }
     if (error) setErr(/last admin/.test(error.message) ? 'This is the last admin — make someone else admin first.' : error.message);
-    else { setSaved(`${p.full_name || p.email} is now ${choice === 'assistant' ? 'an Admin assistant' : choice === 'principal' ? 'the Principal' : newRole}.`); list.reload(); }
+    else { setSaved(`${p.full_name || p.email} is now ${choice === 'assistant' ? 'an Admin assistant' : choice === 'principal' ? 'the Principal' : choice === 'accountant' ? 'the Treasurer / accountant' : newRole}.`); list.reload(); }
   }
 
   // Existing student logins without a username: let them sign in with the parent's mobile number.
@@ -151,7 +152,7 @@ export default function Users({ me }) {
     const c = creating;
     let { data, error } = await supabase.rpc('admin_create_user', {
       p_email: c.email, p_password: c.password, p_full_name: c.full_name, p_phone: c.phone || null,
-      p_role: c.role === 'assistant' || c.role === 'principal' ? 'teacher' : c.role,
+      p_role: ['assistant', 'principal', 'accountant'].includes(c.role) ? 'teacher' : c.role,
       p_student_id: c.role === 'student' && c.student_id ? c.student_id : c.role === 'parent' && c.children[0] ? c.children[0] : null,
     });
     if (!error && c.role === 'parent' && c.children.length > 1) {
@@ -161,6 +162,10 @@ export default function Users({ me }) {
     if (!error && c.role !== 'student' && c.gender) {
       const { error: eg } = await supabase.from('profiles').update({ gender: c.gender }).eq('id', data.id);
       if (eg && !/gender/.test(eg.message)) error = { message: `Login created, but gender not saved: ${eg.message}` };
+    }
+    if (!error && c.role === 'accountant') {
+      const { error: e6 } = await supabase.from('profiles').update({ staff_title: 'accountant', permissions: ACCOUNTANT_PERMS }).eq('id', data.id);
+      if (e6) error = { message: /staff_title/.test(e6.message) ? 'Login created, but the Treasurer type needs update-28.sql in Supabase.' : e6.message };
     }
     if (!error && c.role === 'principal') {
       const { error: e5 } = await supabase.from('profiles').update({ staff_title: 'principal', permissions: PRINCIPAL_PERMS }).eq('id', data.id);
@@ -297,6 +302,7 @@ export default function Users({ me }) {
                         <option value="teacher">Teacher</option>
                         {(meAdmin || p.staff_title === 'principal') && <option value="principal">Principal</option>}
                         {(meAdmin || p.staff_title === 'assistant') && <option value="assistant">Admin assistant</option>}
+                        {(meAdmin || p.staff_title === 'accountant') && <option value="accountant">Treasurer / accountant</option>}
                         {(meAdmin || p.role === 'admin') && <option value="admin">Admin</option>}
                       </select>
                       {p.role === 'teacher' && (p.permissions || []).length > 0 && (
@@ -325,18 +331,22 @@ export default function Users({ me }) {
       )}
 
       {creating && (
-        <Modal title={{ student: 'Create student login', parent: 'Create parent login', admin: 'Create admin login', assistant: 'Create Admin assistant login', principal: 'Create Principal login' }[creating.role] || 'Create teacher login'} onClose={() => setCreating(null)}>
+        <Modal title={{ student: 'Create student login', parent: 'Create parent login', admin: 'Create admin login', assistant: 'Create Admin assistant login', principal: 'Create Principal login', accountant: 'Create Treasurer / accountant login' }[creating.role] || 'Create teacher login'} onClose={() => setCreating(null)}>
           <form className="form-grid" onSubmit={create}>
             <label>Login type
               <select value={creating.role} onChange={(e) => setCreating({ ...creating, role: e.target.value })}>
                 <option value="teacher">Teacher</option>
                 {meAdmin && <option value="principal">Principal</option>}
                 {meAdmin && <option value="assistant">Admin assistant</option>}
+                {meAdmin && <option value="accountant">Treasurer / accountant</option>}
                 <option value="student">Student</option>
                 <option value="parent">Parent</option>
                 {meAdmin && <option value="admin">Admin</option>}
               </select>
             </label>
+            {creating.role === 'accountant' && (
+              <p className="span2 small notice-inline">The <b>Treasurer / accountant</b> sees only the Finance pages: income & expenses, fees & collection, staff payments, budget and finance reports. The admin keeps full control.</p>
+            )}
             {creating.role === 'principal' && (
               <p className="span2 small notice-inline">The <b>Principal</b> reviews, approves, rejects and issues certificates, and finalizes and publishes results. Adjust later with <b>Access</b>.</p>
             )}
@@ -423,6 +433,7 @@ export default function Users({ me }) {
                 <option value="teacher">Teacher</option>
                 {(meAdmin || resetting.staff_title === 'principal') && <option value="principal">Principal</option>}
                 {(meAdmin || resetting.staff_title === 'assistant') && <option value="assistant">Admin assistant</option>}
+                        {(meAdmin || resetting.staff_title === 'accountant') && <option value="accountant">Treasurer / accountant</option>}
                 {(meAdmin || resetting.role === 'admin') && <option value="admin">Admin</option>}
               </select>
             </label>

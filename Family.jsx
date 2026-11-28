@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { supabase } from './supabase.js';
+import FeeStatement from './FeeStatement.jsx';
 import { formatDate, STATUS_LABELS, classTag } from './util.js';
 import { KIND_LABEL, GRADE_LABEL } from './progress.js';
 import { useSetup, StudentResults } from './Exams.jsx';
@@ -78,7 +79,7 @@ export function ChildDashboard({ student, setup }) {
           {student.status === 'approved' && <button className="btn ghost small" onClick={() => setShowId(true)}>📱 Digital ID</button>}
         </div>
         <div className="segmented child-tabs">
-          {[['overview', 'Overview'], ['results', 'Results'], ['progress', 'Quran progress'], ['attendance', 'Attendance'], ['certificates', `Certificates${data.certs.length ? ` (${data.certs.length})` : ''}`]].map(([k, l]) => (
+          {[['overview', 'Overview'], ['results', 'Results'], ['progress', 'Quran progress'], ['attendance', 'Attendance'], ['certificates', `Certificates${data.certs.length ? ` (${data.certs.length})` : ''}`], ['fees', 'Fees']].map(([k, l]) => (
             <button key={k} className={tab === k ? 'active' : ''} onClick={() => setTab(k)}>{l}</button>
           ))}
         </div>
@@ -121,6 +122,7 @@ export function ChildDashboard({ student, setup }) {
             </>
           )
         )}
+        {tab === 'fees' && <FeeStatement students={[student]} compact />}
         {tab === 'certificates' && <CertificateList certs={data.certs} student={student} className={className} setup={setup} onOpen={setCert} />}
       </section>
       {cert && <Modal title={cert.certificate_no} onClose={() => setCert(null)}><CertificateCard cert={cert} student={student} className={className} setup={setup} /></Modal>}

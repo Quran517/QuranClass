@@ -259,6 +259,7 @@ export function finishPdf(doc, filename, print) {
 // Save a file with its proper name (some browsers otherwise use a random
 // name like "c8220749-b899-…" with no .pdf ending).
 export function saveBlob(blob, filename) {
+  filename = String(filename || 'file').replace(/[–—]/g, '-').replace(/[\\/:*?"<>|]+/g, '-'); // safe file name on every computer
   const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
   const url = URL.createObjectURL(file);
   const a = document.createElement('a');
