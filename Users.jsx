@@ -38,6 +38,7 @@ function loginMessage({ full_name, email, password, role, staff_code, student_co
 
 export default function Users({ me }) {
   const list = useQuery(() => supabase.from('profiles').select('*').order('created_at', { ascending: false }));
+  const [showInactive, setShowInactive] = useState(false);
   const linked = useQuery(() => supabase.from('students').select('profile_id, student_code, full_name, guardian_phone, whatsapp').not('profile_id', 'is', null));
   const studentCode = Object.fromEntries((linked.data || []).map((s) => [s.profile_id, s.student_code]));
   const freeStudents = useQuery(() =>
@@ -111,6 +112,16 @@ export default function Users({ me }) {
       }
     }
     setBusy(false); setSaved(`${ok} students can now sign in with their parent's mobile number (see the Username column).`); list.reload();
+  }
+
+  // Deactivate: the person cannot sign in, but nothing is deleted; Reactivate undoes it
+  async function setActive(p, on) {
+    if (!on && !window.confirm(`Deactivate ${p.full_name || p.email}? They will not be able to sign in until you reactivate them. Nothing is deleted.`)) return;
+    setErr(''); setSaved(''); setBusy(true);
+    const { error } = await supabase.rpc('admin_set_active', { p_user: p.id, p_active: on });
+    setBusy(false);
+    if (error) setErr(/admin_set_active|schema cache/.test(error.message) ? 'Deactivating needs a database update — run update-29.sql in Supabase → SQL Editor.' : error.message);
+    else { setSaved(`${p.full_name || p.email} is now ${on ? 'active again' : 'deactivated'}.`); setResetting(null); list.reload(); }
   }
 
   async function removeLogin(p) {
@@ -239,8 +250,10 @@ export default function Users({ me }) {
     setResetting(null);
   }
 
+  const nInactive = (list.data || []).filter((p) => p.active === false).length;
   const rows = (list.data || []).filter((p) =>
     (!role || p.role === role) &&
+    (showInactive ? p.active === false : p.active !== false) &&
     (!q || `${p.full_name} ${p.email} ${p.phone} ${p.username || ''} ${p.staff_code || ''} ${studentCode[p.id] || ''}`.toLowerCase().includes(q.toLowerCase()))
   );
 
@@ -267,6 +280,7 @@ export default function Users({ me }) {
       </p>
       <div className="filters">
         <input placeholder="Search name, email, phone, ID…" value={q} onChange={(e) => setQ(e.target.value)} />
+        {nInactive > 0 && <label className="inline small"><input type="checkbox" checked={showInactive} onChange={(e) => setShowInactive(e.target.checked)} /> Show deactivated ({nInactive})</label>}
         <select value={role} onChange={(e) => setRole(e.target.value)}>
           <option value="">All roles</option>
           <option value="student">Students</option>
@@ -289,8 +303,8 @@ export default function Users({ me }) {
               {rows.map((p) => {
                 const wa = whatsappLink(p.phone, `Assalamu Alaikum ${p.full_name || ''},`);
                 return (
-                  <tr key={p.id}>
-                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}<div className="small muted">{roleLabel(p)}{p.gender ? ` · ${p.gender === 'female' ? 'Female' : 'Male'}` : ''}{p.username ? ` · @${p.username}` : ''}</div></td>
+                  <tr key={p.id} className={p.active === false ? 'inactive-row' : ''}>
+                    <td>{p.full_name || <span className="muted">—</span>}{p.id === me.id && <span className="small muted"> (you)</span>}{p.active === false && <span className="fpill no"> Inactive</span>}<div className="small muted">{roleLabel(p)}{p.gender ? ` · ${p.gender === 'female' ? 'Female' : 'Male'}` : ''}{p.username ? ` · @${p.username}` : ''}</div></td>
                     <td className="nowrap"><b>{p.staff_code || studentCode[p.id] || <span className="muted">—</span>}</b></td>
                     <td className="small">{realEmail(p.email) || <span className="muted">no email</span>}<br />{p.phone}{wa && <> · <a href={wa} target="_blank" rel="noreferrer">WhatsApp</a></>}</td>
                     <td className="small nowrap">{formatDate(p.created_at)}</td>
@@ -447,6 +461,9 @@ export default function Users({ me }) {
             {err && <p className="error span2">{err}</p>}
             <div className="span2 actions">
               <button className="btn" disabled={busy}>{busy ? 'Saving…' : 'Set new password'}</button>
+              {resetting.id !== me.id && meAdmin && (resetting.active === false
+                ? <button type="button" className="btn" onClick={() => setActive(resetting, true)}>Reactivate this login</button>
+                : <button type="button" className="btn ghost" onClick={() => setActive(resetting, false)}>Deactivate (stop sign-in)</button>)}{' '}
               {resetting.id !== me.id && <button type="button" className="btn danger ghost" onClick={() => removeLogin(resetting)}>Delete this login</button>}
             </div>
           </form>

@@ -8,6 +8,16 @@ import { getSettings } from './settings.js';
 import Modal from './Modal.jsx';
 import { money, cur, round2, monthStart, monthLabel, addMonths, fetchMethods, isMissing, NEEDS_SQL } from './finance.js';
 
+// class days in a month (from Settings → class days); for the current month, only days up to today
+export function classDaysIn(month) {
+  const days = getSettings().class_days || [6];
+  const d = new Date(month + 'T00:00:00'); const m = d.getMonth();
+  const now = new Date(); const last = (d.getFullYear() === now.getFullYear() && m === now.getMonth()) ? now.getDate() : 31;
+  let n = 0;
+  for (; d.getMonth() === m && d.getDate() <= last; d.setDate(d.getDate() + 1)) if (days.includes(d.getDay())) n++;
+  return n;
+}
+
 const TYPE = { monthly: 'Fixed monthly', per_class: 'Per class taught', volunteer: 'Volunteer (no pay)' };
 const sumList = (l) => round2((l || []).reduce((n, x) => n + Number(x.amount || 0), 0));
 export const slipNet = (s) => round2(Number(s.basic || 0) + sumList(s.allowances) - sumList(s.deductions));
@@ -36,7 +46,7 @@ export async function payslipPdf(s, person) {
 export default function StaffPay() {
   const [view, setView] = useState('slips');
   const [month, setMonth] = useState(monthStart());
-  const staff = useQuery(() => supabase.from('profiles').select('id, full_name, email, phone, role, staff_code, staff_title').in('role', ['teacher', 'admin']).order('full_name'));
+  const staff = useQuery(() => supabase.from('profiles').select('*').in('role', ['teacher', 'admin']).order('full_name').then((r) => ({ ...r, data: (r.data || []).filter((p) => p.active !== false) })));
   const pay = useQuery(() => supabase.from('staff_pay').select('*'));
   const slips = useQuery(() => supabase.from('payslips').select('*').eq('month', month).order('created_at'), [month]);
   const methods = useQuery(fetchMethods);
@@ -66,7 +76,10 @@ function PaySetup({ staff, pay }) {
   async function save(id) {
     setErr(''); setSaved('');
     const v = cur0(id);
-    const { error } = await supabase.from('staff_pay').upsert({ profile_id: id, pay_type: v.pay_type, amount: round2(v.amount), note: v.note || null });
+    const row = { profile_id: id, pay_type: v.pay_type, amount: round2(v.amount), note: v.note || null };
+    if (v.absence_deduct !== undefined) row.absence_deduct = v.pay_type === 'monthly' && !!v.absence_deduct;
+    let { error } = await supabase.from('staff_pay').upsert(row);
+    if (error && /absence_deduct/.test(error.message)) { setErr('“Reduce for missed classes” needs update-29.sql in Supabase. Saved without it.'); delete row.absence_deduct; ({ error } = await supabase.from('staff_pay').upsert(row)); }
     if (error) setErr(error.message); else { setSaved('Saved.'); const n = { ...edits }; delete n[id]; setEdits(n); pay.reload(); }
   }
   return (
@@ -81,7 +94,8 @@ function PaySetup({ staff, pay }) {
               <tr key={p.id}>
                 <td><b>{staffName(p)}</b> <span className="small muted">{p.staff_code}</span></td>
                 <td><select value={v.pay_type} onChange={(e) => setEdits({ ...edits, [p.id]: { ...edits[p.id], pay_type: e.target.value } })}>{Object.entries(TYPE).map(([k, l]) => <option key={k} value={k}>{l}</option>)}</select></td>
-                <td className="num">{v.pay_type === 'volunteer' ? <span className="muted">—</span> : <input type="number" min="0" step="0.01" style={{ width: 110 }} value={v.amount} onChange={(e) => setEdits({ ...edits, [p.id]: { ...edits[p.id], amount: e.target.value } })} />}<div className="small muted">{v.pay_type === 'per_class' ? 'for each class' : v.pay_type === 'monthly' ? 'each month' : ''}</div></td>
+                <td className="num">{v.pay_type === 'volunteer' ? <span className="muted">—</span> : <input type="number" min="0" step="0.01" style={{ width: 110 }} value={v.amount} onChange={(e) => setEdits({ ...edits, [p.id]: { ...edits[p.id], amount: e.target.value } })} />}<div className="small muted">{v.pay_type === 'per_class' ? 'for each class' : v.pay_type === 'monthly' ? 'each month' : ''}</div>
+                  {v.pay_type === 'monthly' && <label className="inline small"><input type="checkbox" checked={!!v.absence_deduct} onChange={(e) => setEdits({ ...edits, [p.id]: { ...edits[p.id], absence_deduct: e.target.checked } })} /> Reduce for missed classes</label>}</td>
                 <td><input value={v.note || ''} onChange={(e) => setEdits({ ...edits, [p.id]: { ...edits[p.id], note: e.target.value } })} placeholder="Bank / IBAN, notes" /></td>
                 <td><button className="btn small" disabled={!dirty} onClick={() => save(p.id)}>Save</button></td>
               </tr>); })}
@@ -109,10 +123,22 @@ function Slips({ month, setMonth, staff, pay, slips, methods }) {
     const { data: taught, error: e1 } = await supabase.rpc('fin_classes_taught', { p_month: month });
     if (e1) { setBusy(false); setErr(isMissing(e1) ? needsSql(e1) : e1.message); return; }
     const days = Object.fromEntries((taught || []).map((t) => [t.profile_id, t.days]));
+    const excused = Object.fromEntries((taught || []).map((t) => [t.profile_id, t.excused || 0]));
+    const held = classDaysIn(month);
     const rows = missing.map((x) => {
-      const classes = x.pay_type === 'per_class' ? days[x.profile_id] || 0 : 0;
-      const basic = x.pay_type === 'per_class' ? round2(classes * Number(x.amount)) : round2(x.amount);
-      return { profile_id: x.profile_id, month, pay_type: x.pay_type, classes, rate: x.pay_type === 'per_class' ? x.amount : 0, basic, net: basic, allowances: [], deductions: [] };
+      const came = days[x.profile_id] || 0;
+      if (x.pay_type === 'per_class') {
+        const basic = round2(came * Number(x.amount));
+        return { profile_id: x.profile_id, month, pay_type: x.pay_type, classes: came, rate: x.amount, basic, net: basic, allowances: [], deductions: [] };
+      }
+      const basic = round2(x.amount);
+      const deductions = [];
+      if (x.absence_deduct && held > 0) {
+        const missed = Math.max(0, held - came - (excused[x.profile_id] || 0));
+        if (missed > 0) deductions.push({ label: `Missed ${missed} of ${held} classes`, amount: round2((basic / held) * missed) });
+      }
+      const slip = { profile_id: x.profile_id, month, pay_type: x.pay_type, classes: came, rate: held ? round2(basic / held) : 0, basic, allowances: [], deductions };
+      return { ...slip, net: slipNet(slip) };
     });
     const { error } = rows.length ? await supabase.from('payslips').insert(rows) : { error: null };
     setBusy(false);
@@ -149,7 +175,7 @@ function Slips({ month, setMonth, staff, pay, slips, methods }) {
                   <tr key={s.id}>
                     <td className="nowrap">{s.slip_no}</td>
                     <td><b>{staffName(person(s.profile_id))}</b> <span className="small muted">{person(s.profile_id)?.staff_code}</span></td>
-                    <td className="small">{TYPE[s.pay_type]}{s.pay_type === 'per_class' ? ` · ${s.classes} × ${money(s.rate, false)}` : ''}</td>
+                    <td className="small">{TYPE[s.pay_type]}{s.pay_type === 'per_class' ? ` · ${s.classes} × ${money(s.rate, false)}` : (s.deductions || []).some((d) => /^Missed/.test(d.label)) ? ` · attended ${s.classes}` : ''}</td>
                     <td className="num">{money(s.basic, false)}</td><td className="num up">{money(sumList(s.allowances), false)}</td><td className="num dn">{money(sumList(s.deductions), false)}</td>
                     <td className="num"><b>{money(s.net, false)}</b></td>
                     <td>{s.status === 'paid' ? <span className="fpill ok">Paid {formatDate(s.paid_on)}</span> : <span className="fpill part">Not paid</span>}</td>

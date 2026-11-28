@@ -82,7 +82,62 @@ export default function Budget() {
           </div>
         </section>
       ))}
+      {q.data && <FeeCalculator year={year} rows={rows} val={val} />}
       {!q.loading && <p className="small muted">Planned result for the year: {money(round2(tot('income', 'budget') - tot('expense', 'budget')))} · Actual so far: {money(round2(tot('income', 'actual') - tot('expense', 'actual')))}</p>}
     </>
+  );
+}
+
+// Work out the student fee from the yearly budget:
+// (planned expenses − other planned income) ÷ students ÷ months of classes
+function FeeCalculator({ year, rows, val }) {
+  const count = useQuery(() => supabase.from('students').select('id', { count: 'exact', head: true }).eq('status', 'approved').then((r) => ({ data: r.count || 0, error: r.error })));
+  const expenses = round2(rows.filter((r) => r.kind === 'expense').reduce((n, r) => n + Number(val(r) || 0), 0));
+  const other = round2(rows.filter((r) => r.kind === 'income' && r.name !== 'Student fees').reduce((n, r) => n + Number(val(r) || 0), 0));
+  const [students, setStudents] = useState('');
+  const [months, setMonths] = useState(10);
+  const [roundTo, setRoundTo] = useState(5);
+  const [extra, setExtra] = useState(0);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+  const n = Number(students || count.data || 0);
+  const need = round2(expenses * (1 + Number(extra || 0) / 100) - other);
+  const perYear = n ? need / n : 0;
+  const perMonth = months ? perYear / Number(months) : 0;
+  const up = (v) => (roundTo > 0 ? Math.ceil(v / roundTo) * roundTo : round2(v));
+  async function makePlan(frequency) {
+    setErr(''); setMsg('');
+    const amount = frequency === 'monthly' ? up(perMonth) : up(perYear);
+    const { error } = await supabase.from('fee_plans').insert({ name: frequency === 'monthly' ? `Monthly fee ${year}` : `Yearly fee ${year}`, amount, frequency });
+    if (error) setErr(error.message); else setMsg(`Fee plan "${frequency === 'monthly' ? 'Monthly' : 'Yearly'} fee ${year}" (${money(amount)}) created. Use Fees & collection → Create fees to charge it.`);
+  }
+  return (
+    <section className="card">
+      <h3>Student fee from the budget</h3>
+      <p className="small muted">Works out how much each student should pay so the year's planned expenses are covered. Brother / sister discounts and free places lower the total collected — add a little extra % to cover them.</p>
+      <div className="form-grid">
+        <label>Planned expenses for {year}<input value={money(expenses)} readOnly /></label>
+        <label>Other planned income (donations etc.)<input value={money(other)} readOnly /></label>
+        <label>Enrolled students<input type="number" min="1" value={students} placeholder={String(count.data ?? '')} onChange={(e) => setStudents(e.target.value)} /></label>
+        <label>Months of classes in the year<input type="number" min="1" max="12" value={months} onChange={(e) => setMonths(e.target.value)} /></label>
+        <label>Extra % (for discounts & unpaid fees)<input type="number" min="0" max="100" value={extra} onChange={(e) => setExtra(e.target.value)} /></label>
+        <label>Round up to<select value={roundTo} onChange={(e) => setRoundTo(Number(e.target.value))}><option value={0}>No rounding</option><option value={1}>1</option><option value={5}>5</option><option value={10}>10</option><option value={25}>25</option><option value={50}>50</option></select></label>
+      </div>
+      {!expenses ? <p className="notice-inline small">First enter the expense budget above and press <b>Save budget</b>.</p> : (
+        <div className="fin-kpis" style={{ marginTop: 12 }}>
+          <div className="fin-kpi bal"><small>To collect from fees</small><b>{money(Math.max(0, need))}</b><i className="muted">expenses{Number(extra) ? ` + ${extra}%` : ''} − other income</i></div>
+          <div className="fin-kpi inc"><small>Fee per student — per year</small><b>{money(up(perYear))}</b><i className="muted">{n} students</i></div>
+          <div className="fin-kpi due"><small>Fee per student — per month</small><b>{money(up(perMonth))}</b><i className="muted">over {months} months</i></div>
+          <div className="fin-kpi exp"><small>Collected at this fee</small><b>{money(up(perMonth) * n * Number(months))}</b><i className="muted">if every student pays in full</i></div>
+        </div>
+      )}
+      {expenses > 0 && n > 0 && (
+        <div className="actions">
+          <button className="btn" onClick={() => makePlan('monthly')}>Create monthly fee plan — {money(up(perMonth))}</button>
+          <button className="btn ghost" onClick={() => makePlan('yearly')}>Create yearly fee plan — {money(up(perYear))}</button>
+        </div>
+      )}
+      {msg && <p className="success">{msg}</p>}{err && <p className="error">{err}</p>}
+    </section>
   );
 }
